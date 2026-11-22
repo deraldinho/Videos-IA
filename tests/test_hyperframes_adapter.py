@@ -13,10 +13,13 @@ sem alterar a assinatura pública nem o contrato de retorno de ``render()``.
 from __future__ import annotations
 
 import logging
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from src.settings import Settings, VideoSettings
 from src.video.hyperframes_adapter import HyperFramesAdapter
 
 
@@ -92,3 +95,73 @@ def test_hyperframes_success_not_logged_as_error(tmp_path, caplog, monkeypatch):
     assert not any(
         rec.levelno >= logging.ERROR for rec in caplog.records
     ), f"Não deve haver log de ERROR em caso de sucesso. Registros: {[rec.getMessage() for rec in caplog.records]}"
+
+
+def _make_adapter(tmp_path, settings, monkeypatch):
+    """Constrói um adapter com um template fake e subprocess.run capturável."""
+    vendor_dir = tmp_path / "vendor" / "hyperframes"
+    (vendor_dir / "templates").mkdir(parents=True)
+    (vendor_dir / "templates" / "tpl.html").write_text(
+        "<html>{{k}}</html>", encoding="utf-8"
+    )
+    adapter = HyperFramesAdapter(
+        vendor_dir=vendor_dir,
+        output_dir=tmp_path / "out",
+        settings=settings,
+    )
+    adapter._cli_bin = "fake-cli"
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return adapter, captured
+
+
+def test_render_with_hyperframes_uses_config_dimensions(tmp_path, monkeypatch):
+    """_render_with_hyperframes monta o CLI com width/height/fps do settings (config.yaml).
+
+    Deve usar os valores do config.yaml (aqui 720x1280 @24fps) em vez dos
+    valores hardcoded "30"/"1080"/"1920".
+    """
+    settings = Settings(video=VideoSettings(width=720, height=1280, fps=24))
+    adapter, captured = _make_adapter(tmp_path, settings, monkeypatch)
+
+    output_path = tmp_path / "out" / "render.mp4"
+    output_path.write_bytes(b"fake mp4")
+
+    adapter._render_with_hyperframes(
+        "tpl", {"k": "v"}, duration_seconds=2.0, output_path=output_path,
+        audio_wav=None,
+    )
+
+    cmd = captured["cmd"]
+    assert "--fps" in cmd and cmd[cmd.index("--fps") + 1] == "24"
+    assert "--width" in cmd and cmd[cmd.index("--width") + 1] == "720"
+    assert "--height" in cmd and cmd[cmd.index("--height") + 1] == "1280"
+
+
+def test_render_with_hyperframes_defaults_when_config_unavailable(tmp_path, monkeypatch):
+    """Sem settings/config disponível, usa defaults iguais aos hardcoded (30/1080/1920)."""
+    import src.video.hyperframes_adapter as module
+
+    monkeypatch.setattr(module, "load_settings", lambda *a, **k: (_ for _ in ()).throw(
+        RuntimeError("config indisponível")
+    ))
+    adapter, captured = _make_adapter(tmp_path, None, monkeypatch)
+
+    output_path = tmp_path / "out" / "render.mp4"
+    output_path.write_bytes(b"fake mp4")
+
+    adapter._render_with_hyperframes(
+        "tpl", {"k": "v"}, duration_seconds=2.0, output_path=output_path,
+        audio_wav=None,
+    )
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--fps") + 1] == "30"
+    assert cmd[cmd.index("--width") + 1] == "1080"
+    assert cmd[cmd.index("--height") + 1] == "1920"

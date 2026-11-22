@@ -21,6 +21,7 @@ from typing import Mapping, Optional
 
 from src.errors import PipelineError
 from src.logging import get_logger
+from src.settings import Settings, load_settings
 from src.video.renderer import HTMLRenderer
 
 logger = get_logger(__name__)
@@ -44,6 +45,7 @@ class HyperFramesAdapter:
         node_bin: str = "node",
         ffmpeg_bin: str = "ffmpeg",
         output_dir: Path | str = "output/drafts",
+        settings: Settings | None = None,
     ) -> None:
         self.node_bin = node_bin
         self.ffmpeg_bin = ffmpeg_bin
@@ -54,6 +56,23 @@ class HyperFramesAdapter:
         if vendor_dir is None:
             vendor_dir = Path(__file__).resolve().parents[1] / "vendor" / "hyperframes"
         self.vendor_dir = Path(vendor_dir).resolve()
+
+        # Dimensões de vídeo: do settings (config.yaml) quando disponível, senão
+        # defaults idênticos aos valores anteriormente hardcoded (30/1080/1920).
+        if settings is None:
+            try:
+                settings = load_settings()
+            except Exception:  # config indisponível: mantém defaults seguros
+                settings = None
+        self.settings = settings
+        if settings is not None:
+            self.video_width = int(settings.video.width)
+            self.video_height = int(settings.video.height)
+            self.video_fps = int(settings.video.fps)
+        else:
+            self.video_width = 1080
+            self.video_height = 1920
+            self.video_fps = 30
 
         self._cli_bin = self._find_hyperframes_cli()
         self._fallback_renderer = HTMLRenderer(
@@ -178,9 +197,9 @@ class HyperFramesAdapter:
             str(tmp_html),
             "--output", str(output_path),
             "--duration", str(duration_seconds),
-            "--fps", "30",
-            "--width", "1080",
-            "--height", "1920",
+            "--fps", str(self.video_fps),
+            "--width", str(self.video_width),
+            "--height", str(self.video_height),
         ]
         if audio_wav is not None and Path(audio_wav).exists():
             cmd += ["--audio", str(audio_wav)]
