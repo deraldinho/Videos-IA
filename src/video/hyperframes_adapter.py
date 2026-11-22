@@ -20,7 +20,10 @@ from pathlib import Path
 from typing import Mapping, Optional
 
 from src.errors import PipelineError
+from src.logging import get_logger
 from src.video.renderer import HTMLRenderer
+
+logger = get_logger(__name__)
 
 
 class HyperFramesAdapter:
@@ -115,9 +118,14 @@ class HyperFramesAdapter:
                     template_name, context, duration_seconds, output_path, audio_wav
                 )
             except Exception as exc:  # noqa: BLE001
-                # HyperFrames falhou: loga e cai no fallback.
-                # Não silencia: o erro é registrado no contexto do fallback.
-                pass
+                # HyperFrames falhou: loga o erro com rastreio completo e cai no fallback.
+                # Nunca silencia: a falha fica visível nos logs antes do fallback.
+                logger.exception(
+                    "HyperFrames falhou ao renderizar o template '%s' (%s): "
+                    "caindo para o fallback HTMLRenderer.",
+                    template_name,
+                    exc,
+                )
 
         # --- Caminho 2: Fallback renderer próprio (Chromium + FFmpeg) -- #
         return self._fallback_renderer.render(
