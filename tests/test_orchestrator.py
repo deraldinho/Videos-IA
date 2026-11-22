@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 
 import pytest
 
@@ -36,6 +37,37 @@ def test_orchestrator_init_creates_db():
         orch = Orchestrator(settings=_tmp_settings(Path(td)), db_path=db_path)
         assert orch.db is not None
         assert orch.sm is not None
+        orch.close()
+
+
+def test_orchestrator_passa_settings_para_hyperframes_adapter():
+    """O Orchestrator deve repassar `settings` ao HyperFramesAdapter.
+
+    Sem isso o adapter cai nos defaults hardcoded (1080/1920/30) ignorando
+    width/height/fps do config.yaml (Finding 4 ligado ao pipeline real).
+    """
+    with tempfile.TemporaryDirectory() as td:
+        db_path = Path(td) / "videos.sqlite3"
+        cfg = Path(td) / "config.yaml"
+        cfg.write_text(
+            "mode: REVIEW\nniche: teste\nscript_kind: factual\n"
+            "video:\n  min_seconds: 30\n  max_seconds: 60\n  target_seconds: 45\n"
+            "  width: 720\n  height: 1280\n  fps: 24\n  ffmpeg: ffmpeg\n  ffprobe: ffprobe\n  node: node\n",
+            encoding="utf-8",
+        )
+        env = Path(td) / ".env"
+        env.write_text("", encoding="utf-8")
+        settings = load_settings(cfg, env)
+
+        with patch("src.orchestrator.HyperFramesAdapter") as mock_adapter:
+            orch = Orchestrator(settings=settings, db_path=db_path)
+            assert mock_adapter.called
+            kwargs = mock_adapter.call_args.kwargs
+            assert "settings" in kwargs, "HyperFramesAdapter deve receber settings"
+            assert kwargs["settings"] is settings
+            assert kwargs["settings"].video.width == 720
+            assert kwargs["settings"].video.height == 1280
+            assert kwargs["settings"].video.fps == 24
         orch.close()
 
 

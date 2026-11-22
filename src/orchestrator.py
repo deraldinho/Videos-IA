@@ -91,6 +91,7 @@ class Orchestrator:
             node_bin=self.settings.video.node,
             ffmpeg_bin=self.settings.video.ffmpeg,
             output_dir="output/drafts",
+            settings=self.settings,
         )
         self.renderer = HTMLRenderer()
         self.catalog = self._load_catalog()
