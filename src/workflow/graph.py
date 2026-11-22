@@ -330,6 +330,7 @@ def transcription_agent(state: dict[str, Any]) -> dict[str, Any]:
 def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
     """Valida qualidade do MP4 (reuso do FFprobeValidator) quando houver vídeo."""
     from src.video.validator import FFprobeValidator
+    from src.settings import load_settings
 
     state = _ensure_state(state)
     mp4_path = state.get("video_assets", [{}])[-1].get("mp4_path") if state.get("video_assets") else None
@@ -339,11 +340,18 @@ def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
 
         validator = FFprobeValidator()
         try:
+            settings = load_settings()
+            width = settings.video.width
+            height = settings.video.height
+            fps = float(settings.video.fps)
+        except Exception:  # noqa: BLE001 - settings indisponível, defaults seguros
+            width, height, fps = 1080, 1920, 30.0
+        try:
             info = validator.validate_tiktok(
                 Path(mp4_path),
-                width=1080,
-                height=1920,
-                fps=30.0,
+                width=width,
+                height=height,
+                fps=fps,
                 require_audio=True,
                 strict=False,
             )
