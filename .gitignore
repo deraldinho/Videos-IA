@@ -1,0 +1,22 @@
+.env
+.env.*
+!.env.example
+.venv/
+node_modules/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+.coverage
+/data/*
+!/data/inbox/
+/data/inbox/*
+!/data/inbox/.gitkeep
+/output/
+/logs/
+/models/
+*.sqlite3*
+
+# embedded/auxiliary (not part of project source)
+vendor/hyperframes/
+graphify-out/cache/

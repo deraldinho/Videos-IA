@@ -1,0 +1,93 @@
+mode: REVIEW  # DRY_RUN | REVIEW | AUTO
+  # Determina o modo de operação do autopilot:
+  # - DRY_RUN: nenhuma operação real de upload/publicação; tudo é mockado.
+  # - REVIEW: revisão manual via FCC-Claude (modo assisted). Prompts são gravados
+  #   em data/inbox/ para o operador submeter JSON de resposta.
+  # - AUTO: execução totalmente automática (requer auto_enabled: true e credenciais).
+live_enabled: false  # libera operações externas Cloudinary/Buffer; ative deliberadamente
+  # Quando false, Cloudinary e Buffer retornam URLs/mock simulados. Em modo AUTO,
+  # deve ser true para uploads reais na TikTok.
+auto_enabled: false  # requerido para mode: AUTO
+  # Ative true apenas no modo AUTO. Em REVIEW/DRY_RUN, define se o pipeline pode
+  # avançar automaticamente ou exigir aprovação manual em cada etapa.
+niche: curiosidades e explicações sobre tecnologia do cotidiano
+  # Assunto/vertical do conteúdo TikTok. Influencia a geração de ideias e o
+  # prompt do modelo LLM. Mantenha em português ou inglês conforme o público-alvo.
+script_kind: factual  # factual | ficcao. Fatos sempre exigem aprovação humana.
+  # factual: cada cena/idea deve ser verificável/true. ficcao: permite cenários
+  # imaginativos. O modo AUTO exige factual para conformidade.
+llm:
+  provider: assisted  # assisted (FCC-Claude + JSON local) | nvidia_nim
+    # assisted: prompt gravado em data/inbox/ para revisão humana via FCC-Claude.
+    # nvidia_nim: chama a API NVIDIA NIM. Requer NVIDIA_API_KEY e NVIDIA_MODEL no
+    # .env, e allow_nvidia_requests: true no config.yaml.
+  allow_nvidia_requests: false  # confirme antes de usar uma cota NVIDIA elegível
+    # Quando true + chave válida no .env, o provedor NVIDIA NIM fica disponível.
+    # Em modo REVIEW/DRY_RUN, deixar false para evitar chamadas acidentais.
+video:
+  min_seconds: 30  # mínimo 1s, máximo 300s (validado em load_settings)
+    # Duração mínima de um vídeo em segundos. O load_settings valida que 1 <= min_seconds <= max_seconds <= 300.
+  max_seconds: 60  # máximo 300s (validado em load_settings)
+    # Duração máxima de um vídeo em segundos. O load_settings valida que min_seconds <= max_seconds <= 300.
+  target_seconds: 45  # duração alvo em segundos
+    # Duração objetivo para o vídeo gerado. O pipeline tenta permanecer próximo deste valor.
+  width: 1080  # largura em pixels
+    # Largura do vídeo final. TikTok recomenda 1080 (horizontal) ou 1920 (vertical).
+  height: 1920  # altura em pixels
+    # Altura do vídeo final. TikTok vertical recomendado: 1920 x 1080 para 9:16.
+  fps: 30  # quadros por segundo
+    # Taxa de quadros do vídeo. 30fps é o padrão para TikTok.
+  ffmpeg: ffmpeg  # caminho executável ffmpeg
+    # Caminho para o binário ffmpeg usado na renderização e transcodificação.
+    # Certifique-se de que o ffmpeg está no PATH ou especifique o caminho completo.
+  ffprobe: ffprobe  # caminho executável ffprobe
+    # Caminho para o binário ffprobe usado para metadados de vídeo.
+  node: node  # caminho executável node (se usar render Node.js)
+    # Caminho para o binário node caso utilize renderizador baseado em Node.js.
+  render_timeout_seconds: 1800  # timeout de renderização em segundos (30 min)
+    # Tempo máximo que um frame de renderização pode levar antes de ser cancelado.
+    # Ajuste se seus vídeos complexos levarem mais de 30 minutos para renderizar.
+  render_workers: 2  # número de workers paralelos de renderização
+    # Quantidade de threads simultâneas para renderização de vídeos.
+    # Aumente para acelerar loteios; diminua para reduzir uso de CPU/memória.
+  # Caminho relativo à raiz do projeto; o ficheiro .onnx é obrigatório.
+  piper_model: models/pt_BR-faber-medium.onnx
+    # Modelo do Piper TTS para síntese de fala em português do Brasil.
+    # O ficheiro deve existir em ./models/ e conter um modelo HSTS ou compatível.
+    # Modelos disponíveis: models/pt_BR-faber-medium.onnx, models/pt_BR-faber-small.onnx, etc.
+publication:
+  timezone: America/Sao_Paulo  # fuso horário para agendamento
+    # Fuso horário usado para determinar os dias de produção e horários de publicação.
+    # Afeta o cálculo do next_slot() e validação de dias de produção.
+  production_time: '08:00'  # horário de início da produção em HH:MM
+    # Horário do dia em que a produção de vídeos começa. Usado para calcular slots de produção.
+  production_days: [1, 2, 3, 4, 5, 6, 7]  # dias da semana em ISO (1=segunda, 7=domingo)
+    # Dias da semana em que a produção está ativa. 1=segunda, 7=domingo.
+    # Use subconjunto se não quiser produzir todos os dias (ex: [1,2,3,4,5] para seg-sex).
+  publish_days: [1, 2, 3, 4, 5, 6, 7]  # dias da semana para publicação em ISO
+    # Dias da semana em que vídeos podem ser publicados. Padrão é todos os dias.
+  publish_times: ['12:00', '19:00']  # horários de publicação em HH:MM
+    # Horários do dia em que o pipeline tenta publicar vídeos.
+    # O scheduler verifica se há vídeos prontos nesses horários.
+  videos_per_day: 2  # máximo de vídeos por dia de publicação
+    # Limite superior de vídeos publicados por dia. O pipeline não agendará mais que esse
+    # número por dia, embora possa publicar menos se houver menos vídeos prontos.
+  queue_limit: 10  # limite de vídeos na fila de espera
+    # Teto de vídeos pendentes na fila por canal. Impede que a fila cresça indefinidamente.
+    # Baseado no plano gratuito do Cloudinary/Buffer; ajuste se tiver plano pago.
+  horizon_days: 7  # horizonte de agendamento em dias
+    # Quantidade de dias no futuro que o pipeline considera para agendamento.
+    # Vídeos mais antigos que esse horizonte são considerados "vencidos" e podem ser descarte.
+  min_lead_minutes: 30  # minutos mínimos de antecedência para agendamento
+    # Período mínimo antes do horário de publicação que um vídeo deve estar pronto.
+    # Vídeos não prontos nesse prazo são adiados para o próximo ciclo de publicação.
+  tick_minutes: 15  # intervalo do tick/scheduler em minutos
+    # Frequência com que o scheduler/tick do pipeline verifica novos vídeos para processar.
+    # Alterar isso requer reinstalação da tarefa do SO (cron ou Windows Task Scheduler).
+cloudinary:
+  max_video_mb: 25  # limite máximo de tamanho de vídeo em MB (plano gratuito)
+    # Tamanho máximo em MB para vídeos enviados ao Cloudinary no plano gratuito.
+    # Videos maiores são rejeitados com PipelineError. Planos pagos suportam valores maiores.
+  stop_usage_percent: 85  # percentual de uso da cota para parar
+    # Quando o uso da cota atinge este percentual (%), o pipeline para de enviar vídeos
+    # para o Cloudinary e aguarda o próximo ciclo para evitar superar o limite do plano gratuito.

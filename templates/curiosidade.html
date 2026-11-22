@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Template</title>
+</head>
+<body>
+    <video width="1080" height="1920" controls>
+        <source src="{{ video_path }}" type="video/mp4">
+        Seu navegador não suporta vídeo.
+    </video>
+    <div class="template-info">
+        <h1>{{ title }}</h1>
+        <p>{{ description }}</p>
+        <p>Hashtags: {{ hashtags }}</p>
+    </div>
+</body>
+</html>

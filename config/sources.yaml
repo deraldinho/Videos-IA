@@ -1,0 +1,12 @@
+# Catálogo curado de fontes para roteiros factuais (TikTok AI Autopilot).
+# Todas as fontes usam HTTPS e possuem evidência editorial. Revisadas por
+# operador humano — nunca há afirmação automática de verdade sobre URLs.
+# Para adicionar uma fonte, inclua: title, url (HTTPS), publisher, accessed_at
+# e editorial_evidence (justificativa de confiança).
+
+cern-first-website:
+  title: "O nascimento da World Wide Web — CERN"
+  url: "https://home.cern/science/computing/the-birth-of-the-web/"
+  publisher: "CERN"
+  accessed_at: "2026-11-20"
+  editorial_evidence: "Página oficial do CERN sobre a origem da World Wide Web, mantida pela própria organização."

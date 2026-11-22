@@ -1,0 +1,42 @@
+{
+  "topic": "Primeiro site da Web no CERN",
+  "template": "curiosidade",
+  "kind": "factual",
+  "title": "O primeiro site do mundo nasceu no CERN",
+  "description": "Tim Berners-Lee inventou a World Wide Web no CERN em 1989. O primeiro endereço foi info.cern.ch, dedicado ao próprio projeto. Em 30 de abril de 1993, o CERN liberou a web para o domínio público.",
+  "hashtags": ["#CERN", "#Web", "#Tecnologia", "#Curiosidade", "#Internet"],
+  "scenes": [
+    {
+      "role": "gancho",
+      "seconds": 3.0,
+      "heading": "O primeiro site do mundo",
+      "narration": [
+        "Você sabia?",
+        "O primeiro site do mundo nasceu no CERN."
+      ],
+      "source_ids": ["cern-first-website"]
+    },
+    {
+      "role": "corpo",
+      "seconds": 9.0,
+      "heading": "A World Wide Web",
+      "narration": [
+        "Tim Berners-Lee inventou a web em 1989.",
+        "O primeiro endereço era info.cern.ch.",
+        "A página falava sobre o próprio projeto World Wide Web.",
+        "O CERN liberou a web para o domínio público em 1993."
+      ],
+      "source_ids": ["cern-first-website"]
+    },
+    {
+      "role": "cta",
+      "seconds": 3.0,
+      "heading": "Fique por dentro",
+      "narration": [
+        "Curtiu essa curiosidade?",
+        "Segue aqui para mais fatos de tecnologia."
+      ],
+      "source_ids": []
+    }
+  ]
+}

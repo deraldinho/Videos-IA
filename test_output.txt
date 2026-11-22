@@ -1,0 +1,25 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.5, pytest-9.0.3, pluggy-1.6.0
+rootdir: d:\Videos-IA\tiktok-automation
+plugins: anyio-4.13.0, langsmith-0.14.9, asyncio-1.4.1, base-url-2.1.0, cov-7.1.0, playwright-0.8.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 161 items
+
+tests\test_ai_provider.py .....                                          [  3%]
+tests\test_cp11_resilience.py ...........                                [  9%]
+tests\test_cp12_observability.py ....                                    [ 12%]
+tests\test_cp13_audiovisual.py .....                                     [ 15%]
+tests\test_integrations_mock.py .......                                  [ 19%]
+tests\test_orchestrator.py ......                                        [ 23%]
+tests\test_quality_gates.py ........                                     [ 28%]
+tests\test_regressions_p0p1.py ..........                                [ 34%]
+tests\test_render_real.py ......                                         [ 38%]
+tests\test_scheduler.py ............                                     [ 45%]
+tests\test_scripts.py .........................                          [ 61%]
+tests\test_settings.py .......                                           [ 65%]
+tests\test_state_machine.py ......                                       [ 69%]
+tests\test_video_basic.py .....                                          [ 72%]
+tests\test_workflow_graph.py ....................................        [ 95%]
+tests\test_workflow_state.py ........                                    [100%]
+
+======================= 161 passed in 803.25s (0:13:23) =======================
