@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from src.errors import PipelineError
+from src.settings import Settings
 
 
 class HTMLRenderer:
@@ -30,11 +31,22 @@ class HTMLRenderer:
     def __init__(
         self,
         *,
+        settings: Settings | None = None,
         node_bin: str = "node",
         ffmpeg_bin: str = "ffmpeg",
         templates_dir: Path | str = "templates",
         output_dir: Path | str = "output/drafts",
     ) -> None:
+        self.settings = settings
+        if settings is not None:
+            self.video_width = settings.video.width
+            self.video_height = settings.video.height
+            self.video_fps = settings.video.fps
+        else:
+            # Defaults iguais aos valores anteriormente hardcoded.
+            self.video_width = 1080
+            self.video_height = 1920
+            self.video_fps = 30
         self.node_bin = node_bin
         self.ffmpeg_bin = ffmpeg_bin
         self.templates_dir = Path(templates_dir).resolve()
@@ -232,7 +244,7 @@ class HTMLRenderer:
 
             # Codifica os frames em MP4 (sem áudio) num arquivo temporário.
             video_only = self.output_dir / f"video_{uuid.uuid4().hex[:8]}.mp4"
-            fps = 30
+            fps = self.video_fps
             pattern = str(frames_dir / "frame-%04d.png")
             cmd = [
                 ffmpeg, "-y", "-framerate", str(fps),
@@ -316,12 +328,12 @@ class HTMLRenderer:
 
   const browser = await puppeteer.launch({{ executablePath, headless: 'new' }});
   const page = await browser.newPage();
-  await page.setViewport({{ width: 1080, height: 1920 }});
+  await page.setViewport({{ width: {self.video_width}, height: {self.video_height} }});
   const htmlPath = '{html_path}'.replace(/\\\\/g, '/');
   await page.goto('file:///' + htmlPath, {{ waitUntil: 'networkidle0' }});
 
   const duration = {float(duration_seconds)};
-  const fps = 30;
+  const fps = {self.video_fps};
   const total = Math.ceil(duration * fps);
   const scenes = {scenes_json};
 

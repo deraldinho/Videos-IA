@@ -21,6 +21,7 @@ from typing import Mapping, Optional
 
 from src.errors import PipelineError
 from src.logging import get_logger
+from src.settings import Settings
 from src.video.renderer import HTMLRenderer
 
 logger = get_logger(__name__)
@@ -40,11 +41,13 @@ class HyperFramesAdapter:
     def __init__(
         self,
         *,
+        settings: Settings | None = None,
         vendor_dir: Path | str | None = None,
         node_bin: str = "node",
         ffmpeg_bin: str = "ffmpeg",
         output_dir: Path | str = "output/drafts",
     ) -> None:
+        self.settings = settings
         self.node_bin = node_bin
         self.ffmpeg_bin = ffmpeg_bin
         self.output_dir = Path(output_dir).resolve()
@@ -61,6 +64,7 @@ class HyperFramesAdapter:
             ffmpeg_bin=ffmpeg_bin,
             templates_dir="templates",
             output_dir=self.output_dir,
+            settings=self.settings,
         )
 
     # ------------------------------------------------------------------ #

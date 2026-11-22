@@ -108,4 +108,44 @@ def test_status_returns_none_for_missing_video():
             orch.close()
 
 
+def _tmp_settings_video(
+    tmp_path: Path, width: int = 720, height: int = 1280, fps: int = 24
+):
+    """Cria settings em modo REVIEW com dimensoes de video customizadas."""
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(
+        "mode: REVIEW\nniche: teste\nscript_kind: factual\n"
+        f"video:\n  min_seconds: 30\n  max_seconds: 60\n  target_seconds: 45\n  width: {width}\n"
+        f"  height: {height}\n  fps: {fps}\n  ffmpeg: ffmpeg\n  ffprobe: ffprobe\n  node: node\n",
+        encoding="utf-8",
+    )
+    env = tmp_path / ".env"
+    env.write_text("", encoding="utf-8")
+    return load_settings(cfg, env)
+
+
+def test_orchestrator_hyperframes_adapter_recebe_settings(tmp_path):
+    """Orchestrator deve repassar settings ao HyperFramesAdapter (Finding 8/D)."""
+    settings = _tmp_settings_video(tmp_path)
+    orch = Orchestrator(settings=settings, db_path=tmp_path / "db.sqlite3")
+    try:
+        assert orch.hyperframes_adapter.settings is settings
+        assert orch.hyperframes_adapter.settings.video.width == 720
+    finally:
+        orch.close()
+
+
+def test_orchestrator_renderer_recebe_settings(tmp_path):
+    """Orchestrator deve instanciar o HTMLRenderer com settings (Finding 8/E)."""
+    settings = _tmp_settings_video(tmp_path)
+    orch = Orchestrator(settings=settings, db_path=tmp_path / "db.sqlite3")
+    try:
+        assert orch.renderer.settings is settings
+        assert orch.renderer.video_width == 720
+        assert orch.renderer.video_height == 1280
+        assert orch.renderer.video_fps == 24
+    finally:
+        orch.close()
+
+
 __all__ = []
