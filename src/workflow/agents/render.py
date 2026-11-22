@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from pathlib import Path
 
+from src.settings import load_settings
 from src.workflow.agents.base import BaseAgent
 from src.workflow.state import Stage, VideoAsset
 
@@ -23,6 +24,11 @@ class RenderAgent(BaseAgent):
 
     def __init__(self) -> None:
         super().__init__("RenderAgent")
+        # Carrega settings internamente (padrao seguro usado nos Findings 5/6).
+        # load_settings() tolera ausencia de credenciais em modo REVIEW/DRY_RUN
+        # (live_enabled=false), caindo para defaults iguais aos valores
+        # anteriormente hardcoded (1080/1920/30) quando config nao sobrescreve.
+        self.settings = load_settings()
 
     def run(self, state: dict[str, Any]) -> dict[str, Any]:
         state = self._ensure_state(state)
@@ -53,6 +59,7 @@ class RenderAgent(BaseAgent):
 
             renderer = HTMLRenderer(
                 output_dir=Path("output/drafts") / "renders",
+                settings=self.settings,
             )
             mp4_path = renderer.render(
                 template_name,
@@ -66,9 +73,9 @@ class RenderAgent(BaseAgent):
             size = mp4_path.stat().st_size if mp4_path.exists() else 0
             video_asset = VideoAsset(
                 mp4_path=str(mp4_path),
-                width=1080,
-                height=1920,
-                fps=30.0,
+                width=self.settings.video.width,
+                height=self.settings.video.height,
+                fps=float(self.settings.video.fps),
                 duration_seconds=total_seconds,
                 has_audio=audio_wav is not None,
                 size_bytes=size,
