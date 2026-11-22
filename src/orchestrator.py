@@ -93,7 +93,7 @@ class Orchestrator:
             output_dir="output/drafts",
             settings=self.settings,
         )
-        self.renderer = HTMLRenderer()
+        self.renderer = HTMLRenderer(settings=self.settings)
         self.catalog = self._load_catalog()
 
     # Cliente Piper TTS: usa o modelo do config.yaml quando disponível;

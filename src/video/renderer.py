@@ -31,21 +31,13 @@ class HTMLRenderer:
     def __init__(
         self,
         *,
+        settings: Settings | None = None,
         node_bin: str = "node",
         ffmpeg_bin: str = "ffmpeg",
         templates_dir: Path | str = "templates",
         output_dir: Path | str = "output/drafts",
-        settings: Settings | None = None,
     ) -> None:
-        self.node_bin = node_bin
-        self.ffmpeg_bin = ffmpeg_bin
-        self.templates_dir = Path(templates_dir).resolve()
-        self.output_dir = Path(output_dir).resolve()
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._puppeteer_module = self._resolve_puppeteer_module()
-
-        # Dimensões de vídeo: do settings (config.yaml) quando disponível, senão
-        # defaults idênticos aos valores anteriormente hardcoded (30/1080/1920).
+        self.settings = settings
         if settings is None:
             try:
                 settings = load_settings()
@@ -57,9 +49,16 @@ class HTMLRenderer:
             self.video_height = int(settings.video.height)
             self.video_fps = int(settings.video.fps)
         else:
+            # Defaults iguais aos valores anteriormente hardcoded.
             self.video_width = 1080
             self.video_height = 1920
             self.video_fps = 30
+        self.node_bin = node_bin
+        self.ffmpeg_bin = ffmpeg_bin
+        self.templates_dir = Path(templates_dir).resolve()
+        self.output_dir = Path(output_dir).resolve()
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._puppeteer_module = self._resolve_puppeteer_module()
 
     # ------------------------------------------------------------------ #
     # Descoberta de ferramentas                                          #
@@ -398,9 +397,9 @@ class HTMLRenderer:
         seconds = max(1.0, float(duration_seconds))
         cmd = [
             ffmpeg, "-y",
-            "-f", "lavfi", "-i", f"color=c=black:s=1080x1920:r=30:d={seconds}",
+            "-f", "lavfi", "-i", f"color=c=black:s={self.video_width}x{self.video_height}:r={self.video_fps}:d={seconds}",
             "-f", "lavfi", "-i", f"anullsrc=r=22050:d={seconds}",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(self.video_fps),
             "-c:a", "aac", "-shortest",
             str(output_path),
         ]
