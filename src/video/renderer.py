@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from src.errors import PipelineError
+from src.settings import Settings, load_settings
 
 
 class HTMLRenderer:
@@ -34,6 +35,7 @@ class HTMLRenderer:
         ffmpeg_bin: str = "ffmpeg",
         templates_dir: Path | str = "templates",
         output_dir: Path | str = "output/drafts",
+        settings: Settings | None = None,
     ) -> None:
         self.node_bin = node_bin
         self.ffmpeg_bin = ffmpeg_bin
@@ -41,6 +43,23 @@ class HTMLRenderer:
         self.output_dir = Path(output_dir).resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._puppeteer_module = self._resolve_puppeteer_module()
+
+        # Dimensões de vídeo: do settings (config.yaml) quando disponível, senão
+        # defaults idênticos aos valores anteriormente hardcoded (30/1080/1920).
+        if settings is None:
+            try:
+                settings = load_settings()
+            except Exception:  # config indisponível: mantém defaults seguros
+                settings = None
+        self.settings = settings
+        if settings is not None:
+            self.video_width = int(settings.video.width)
+            self.video_height = int(settings.video.height)
+            self.video_fps = int(settings.video.fps)
+        else:
+            self.video_width = 1080
+            self.video_height = 1920
+            self.video_fps = 30
 
     # ------------------------------------------------------------------ #
     # Descoberta de ferramentas                                          #
@@ -232,7 +251,7 @@ class HTMLRenderer:
 
             # Codifica os frames em MP4 (sem áudio) num arquivo temporário.
             video_only = self.output_dir / f"video_{uuid.uuid4().hex[:8]}.mp4"
-            fps = 30
+            fps = self.video_fps
             pattern = str(frames_dir / "frame-%04d.png")
             cmd = [
                 ffmpeg, "-y", "-framerate", str(fps),
@@ -296,8 +315,7 @@ class HTMLRenderer:
 
         return output_path
 
-    @staticmethod
-    def _capture_script(html_path: Path, duration_seconds: float, scenes: list) -> str:
+    def _capture_script(self, html_path: Path, duration_seconds: float, scenes: list) -> str:
         """Gera o script Node que captura frames do HTML renderizado.
 
         Avança entre as cenas do storyboard ao longo da duração e grava um
@@ -316,12 +334,12 @@ class HTMLRenderer:
 
   const browser = await puppeteer.launch({{ executablePath, headless: 'new' }});
   const page = await browser.newPage();
-  await page.setViewport({{ width: 1080, height: 1920 }});
+  await page.setViewport({{ width: {self.video_width}, height: {self.video_height} }});
   const htmlPath = '{html_path}'.replace(/\\\\/g, '/');
   await page.goto('file:///' + htmlPath, {{ waitUntil: 'networkidle0' }});
 
   const duration = {float(duration_seconds)};
-  const fps = 30;
+  const fps = {self.video_fps};
   const total = Math.ceil(duration * fps);
   const scenes = {scenes_json};
 
