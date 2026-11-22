@@ -392,9 +392,9 @@ class HTMLRenderer:
         seconds = max(1.0, float(duration_seconds))
         cmd = [
             ffmpeg, "-y",
-            "-f", "lavfi", "-i", f"color=c=black:s=1080x1920:r=30:d={seconds}",
+            "-f", "lavfi", "-i", f"color=c=black:s={self.video_width}x{self.video_height}:r={self.video_fps}:d={seconds}",
             "-f", "lavfi", "-i", f"anullsrc=r=22050:d={seconds}",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(self.video_fps),
             "-c:a", "aac", "-shortest",
             str(output_path),
         ]
