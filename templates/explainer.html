@@ -5,54 +5,26 @@
 <meta name="viewport" content="width=1080, height=1920">
 <title>{{title}}</title>
 <style>
-  :root {
-    --bg-start: #0f2027;
-    --bg-mid: #203a43;
-    --bg-end: #2c5364;
-    --accent: #00e676;
-    --accent-glow: rgba(0,230,118,0.4);
-    --cta: #ffffff;
-    --text: #ffffff;
-    --text-dim: rgba(255,255,255,0.95);
-    --radius: 30px;
-    --safe-top: 120px;
-    --safe-bottom: 180px;
-    --safe-side: 60px;
-  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 1080px; height: 1920px; overflow: hidden; }
   body {
     font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: linear-gradient(135deg, var(--bg-start), var(--bg-mid), var(--bg-end));
-    color: var(--text);
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    color: #ffffff;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
     position: relative;
-  }
-  .safe {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    position: relative;
-    padding: var(--safe-top) var(--safe-side) var(--safe-bottom) var(--safe-side);
-    box-sizing: border-box;
-    z-index: 2;
   }
   .badge {
     position: absolute; top: 60px; left: 60px;
-    background: var(--accent); color: #000;
-    padding: 10px 20px; border-radius: var(--radius);
+    background: #00e676; color: #000;
+    padding: 10px 20px; border-radius: 30px;
     font-weight: 800; font-size: 1.1rem;
-    box-shadow: 0 4px 15px var(--accent-glow);
+    box-shadow: 0 4px 15px rgba(0,230,118,0.4);
     animation: fadeIn 1s ease-out;
-    z-index: 3;
   }
   h1 { font-size: 2.4rem; line-height: 1.2; max-width: 900px; margin: 0 40px; }
   .explanation {
@@ -63,13 +35,13 @@
   .highlight {
     background: rgba(0,230,118,0.15);
     padding: 20px; border-radius: 14px;
-    border-left: 6px solid var(--accent);
+    border-left: 6px solid #00e676;
     margin-top: 25px;
     font-weight: 700;
   }
-  p.sub { font-size: 1.35rem; margin-top: 30px; max-width: 860px; line-height: 1.5; color: var(--text-dim); }
-  .hashtags { margin-top: 30px; font-size: 1.3rem; color: var(--accent); font-weight: 700; }
-  .cta { position: absolute; bottom: 120px; font-size: 1.5rem; font-weight: 800; color: var(--cta); z-index: 3; }
+  p.sub { font-size: 1.35rem; margin-top: 30px; max-width: 860px; line-height: 1.5; opacity: 0.95; }
+  .hashtags { margin-top: 30px; font-size: 1.3rem; color: #00e676; font-weight: 700; }
+  .cta { position: absolute; bottom: 120px; font-size: 1.5rem; font-weight: 800; color: #fff; }
   @keyframes fadeInUp { from{opacity:0;transform:translateY(40px);} to{opacity:1;transform:translateY(0);} }
   .fade-in { animation: fadeIn 0.8s ease-out forwards; }
   @keyframes fadeIn { from{opacity:0;transform:translateY(30px);} to{opacity:1;transform:translateY(0);} }
@@ -77,13 +49,11 @@
 </head>
 <body>
   <div class="badge fade-in">EXPLICAÇÃO</div>
-  <div class="safe fade-in">
-    <h1 class="fade-in">{{title}}</h1>
-    <div class="explanation fade-in">{{explanation_body}}</div>
-    <div class="highlight fade-in">{{highlight}}</div>
-    <p class="sub fade-in">{{description}}</p>
-    <div class="hashtags fade-in">{{hashtags}}</div>
-  </div>
+  <h1 class="fade-in">{{title}}</h1>
+  <div class="explanation fade-in">{{explanation_body}}</div>
+  <div class="highlight fade-in">{{highlight}}</div>
+  <p class="sub fade-in">{{description}}</p>
+  <div class="hashtags fade-in">{{hashtags}}</div>
   <div class="cta fade-in">Aprenda algo novo todo dia.</div>
 </body>
 </html>

@@ -5,53 +5,25 @@
 <meta name="viewport" content="width=1080, height=1920">
 <title>{{title}}</title>
 <style>
-  :root {
-    --bg-start: #833ab4;
-    --bg-mid: #fd1d1d;
-    --bg-end: #fcb045;
-    --accent: #fcb045;
-    --accent-glow: rgba(252,176,69,0.4);
-    --cta: #ffffff;
-    --text: #ffffff;
-    --text-dim: rgba(255,255,255,0.95);
-    --radius: 30px;
-    --safe-top: 120px;
-    --safe-bottom: 180px;
-    --safe-side: 60px;
-  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 1080px; height: 1920px; overflow: hidden; }
   body {
     font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: linear-gradient(135deg, var(--bg-start), var(--bg-mid), var(--bg-end));
-    color: var(--text);
+    background: linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045);
+    color: #ffffff;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
     position: relative;
-  }
-  .safe {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    position: relative;
-    padding: var(--safe-top) var(--safe-side) var(--safe-bottom) var(--safe-side);
-    box-sizing: border-box;
-    z-index: 2;
   }
   .badge {
     position: absolute; top: 60px; left: 60px;
-    background: var(--accent); color: #000;
-    padding: 10px 20px; border-radius: var(--radius);
+    background: #fcb045; color: #000;
+    padding: 10px 20px; border-radius: 30px;
     font-weight: 800; font-size: 1.1rem;
     animation: shake 2s infinite;
-    z-index: 3;
   }
   h1 { font-size: 2.3rem; line-height: 1.2; max-width: 900px; margin: 0 40px; }
   .question {
@@ -62,9 +34,9 @@
     font-size: 1.5rem; line-height: 1.6; max-width: 860px;
     margin: 30px 0; opacity: 0; animation: fadeInUp 1s ease-out forwards;
   }
-  p.sub { font-size: 1.3rem; margin-top: 30px; max-width: 860px; line-height: 1.5; color: var(--text-dim); }
-  .hashtags { margin-top: 30px; font-size: 1.3rem; color: var(--accent); font-weight: 700; }
-  .cta { position: absolute; bottom: 120px; font-size: 1.5rem; font-weight: 800; color: var(--cta); z-index: 3; }
+  p.sub { font-size: 1.3rem; margin-top: 30px; max-width: 860px; line-height: 1.5; opacity: 0.95; }
+  .hashtags { margin-top: 30px; font-size: 1.3rem; color: #fcb045; font-weight: 700; }
+  .cta { position: absolute; bottom: 120px; font-size: 1.5rem; font-weight: 800; color: #fff; }
   @keyframes shake { 0%,100%{transform:rotate(0deg);} 25%{transform:rotate(-3deg);} 75%{transform:rotate(3deg);} }
   @keyframes bounceIn { from{opacity:0;transform:scale(0.8);} to{opacity:1;transform:scale(1);} }
   @keyframes fadeInUp { from{opacity:0;transform:translateY(40px);} to{opacity:1;transform:translateY(0);} }
@@ -74,13 +46,11 @@
 </head>
 <body>
   <div class="badge fade-in">P&R</div>
-  <div class="safe fade-in">
-    <h1 class="fade-in">{{title}}</h1>
-    <div class="question fade-in">{{question}}</div>
-    <div class="answer fade-in">{{answer}}</div>
-    <p class="sub fade-in">{{description}}</p>
-    <div class="hashtags fade-in">{{hashtags}}</div>
-  </div>
+  <h1 class="fade-in">{{title}}</h1>
+  <div class="question fade-in">{{question}}</div>
+  <div class="answer fade-in">{{answer}}</div>
+  <p class="sub fade-in">{{description}}</p>
+  <div class="hashtags fade-in">{{hashtags}}</div>
   <div class="cta fade-in">Envie sua pergunta.</div>
 </body>
 </html>
