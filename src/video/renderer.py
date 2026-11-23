@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from src.errors import PipelineError
-from src.settings import Settings, load_settings
+from src.settings import Settings
 
 
 class HTMLRenderer:
@@ -37,12 +37,6 @@ class HTMLRenderer:
         templates_dir: Path | str = "templates",
         output_dir: Path | str = "output/drafts",
     ) -> None:
-        self.settings = settings
-        if settings is None:
-            try:
-                settings = load_settings()
-            except Exception:  # config indisponível: mantém defaults seguros
-                settings = None
         self.settings = settings
         if settings is not None:
             self.video_width = int(settings.video.width)

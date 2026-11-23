@@ -21,7 +21,7 @@ from typing import Mapping, Optional
 
 from src.errors import PipelineError
 from src.logging import get_logger
-from src.settings import Settings, load_settings
+from src.settings import Settings
 from src.video.renderer import HTMLRenderer
 
 logger = get_logger(__name__)
@@ -58,13 +58,6 @@ class HyperFramesAdapter:
             vendor_dir = Path(__file__).resolve().parents[1] / "vendor" / "hyperframes"
         self.vendor_dir = Path(vendor_dir).resolve()
 
-        # Dimensões de vídeo: do settings (config.yaml) quando disponível, senão
-        # defaults idênticos aos valores anteriormente hardcoded (30/1080/1920).
-        if settings is None:
-            try:
-                settings = load_settings()
-            except Exception:  # config indisponível: mantém defaults seguros
-                settings = None
         self.settings = settings
         if settings is not None:
             self.video_width = int(settings.video.width)
