@@ -192,13 +192,14 @@ def cmd_run_daily(orch: Orchestrator, _: argparse.Namespace) -> int:
     """Executa o pipeline diário: processa vídeos em AWAITING_APPROVAL (se AUTO)
     e avança os que estão em estágios anteriores."""
     settings = orch.settings
+    publication = settings.publication
     if settings.mode == "AUTO" and not settings.auto_enabled:
         print("ERRO: modo AUTO requer auto_enabled: true no config.yaml.")
         return 1
 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
-    prod_day = valid_production_day(settings, now)
+    prod_day = valid_production_day(publication, now)
     if prod_day is None:
         print("Hoje não é dia de produção. Nenhuma ação executada.")
         return 0
