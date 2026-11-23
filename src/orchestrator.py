@@ -29,6 +29,8 @@ from src.settings import Settings, load_settings
 from src.state_machine import StateMachine
 from src.video.hyperframes_adapter import HyperFramesAdapter
 from src.video.renderer import HTMLRenderer
+from src.circuit_breaker import CircuitBreaker
+from src.retry import retry_call
 from src.video.tts import PiperTTS
 from src.video.validator import FFprobeValidator
 
@@ -85,6 +87,19 @@ class Orchestrator:
             db=self.db,
         )
 
+        # Circuit breakers + retry para chamadas de serviços externos
+        # (Cloudinary upload e Buffer create_post). Em modo não-live (mock)
+        # as chamadas nunca falham, então o circuito nunca abre e o retry não
+        # é acionado: comportamento preservado. Em modo live, falhas
+        # transitórias são retryadas e, após o threshold, o circuito abre
+        # protegendo contra cascata de falhas (CP11 componentes, CP21 integração).
+        self._cloudinary_cb = CircuitBreaker(
+            name="cloudinary", fail_threshold=3, recovery_timeout_seconds=30.0,
+        )
+        self._buffer_cb = CircuitBreaker(
+            name="buffer", fail_threshold=3, recovery_timeout_seconds=30.0,
+        )
+
         # HyperFramesAdapter com fallback automático para HTMLRenderer.
         self.hyperframes_adapter = HyperFramesAdapter(
             vendor_dir=Path('vendor/hyperframes'),
@@ -101,6 +116,26 @@ class Orchestrator:
             thresholds=self.settings.quality.to_thresholds(),
         )
         self.catalog = self._load_catalog()
+
+    # ------------------------------------------------------------------ #
+    # Resiliência: circuit breaker + retry para serviços externos        #
+    # ------------------------------------------------------------------ #
+    def _call_with_resilience(self, cb: CircuitBreaker, func, *args, **kwargs):
+        """Executa ``func`` protegida por circuit breaker + retry com backoff.
+
+        Em modo não-live (mock) as chamadas externas nunca falham, portanto o
+        circuito nunca abre e o retry não é acionado: comportamento idêntico ao
+        de antes. Em modo live, falhas transitórias (rede, timeout) são
+        retryadas com backoff exponencial e, após o threshold de falhas, o
+        circuito abre bloqueando novas chamadas até o tempo de recuperação.
+        """
+        return retry_call(
+            lambda: cb.call(func, *args, **kwargs),
+            max_attempts=3,
+            base_delay_seconds=0.5,
+            max_delay_seconds=5.0,
+            retryable_exceptions=(Exception,),
+        )
 
     # Cliente Piper TTS: usa o modelo do config.yaml quando disponível;
     # em REVIEW/DRY_RUN gera silêncio fallback para não bloquear o pipeline.
@@ -469,7 +504,9 @@ class Orchestrator:
             self.sm.advance(video_id, "UPLOADING", actor=actor,
                             note="iniciando upload para o Cloudinary")
 
-        result = self.cloudinary.upload(video_id, path)
+        result = self._call_with_resilience(
+            self._cloudinary_cb, self.cloudinary.upload, video_id, path
+        )
         self.sm.advance(
             video_id, "UPLOADED", actor=actor,
             note=f"enviado ao Cloudinary: {result.public_id}",
@@ -497,12 +534,10 @@ class Orchestrator:
             raise PipelineError(f"Vídeo {video_id} não tem URL do Cloudinary.")
 
         due_at = row["scheduled_at"]
-        post = self.buffer.create_post(
-            video_id=video_id,
-            text=caption,
-            channel_id=self.buffer.channel_id,
-            due_at=due_at,
-            video_url=video_url,
+        post = self._call_with_resilience(
+            self._buffer_cb, self.buffer.create_post,
+            video_id=video_id, text=caption,
+            channel_id=self.buffer.channel_id, due_at=due_at, video_url=video_url,
         )
         self.db.upsert_scheduled_post(
             video_id=video_id,
