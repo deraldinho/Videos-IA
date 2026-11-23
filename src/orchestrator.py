@@ -94,6 +94,8 @@ class Orchestrator:
             settings=self.settings,
         )
         self.renderer = HTMLRenderer(settings=self.settings)
+        # Validador de MP4 com thresholds/strict derivados do settings (CP18).
+        self.validator = FFprobeValidator(thresholds=self.settings.quality.to_thresholds())
         self.catalog = self._load_catalog()
 
     # Cliente Piper TTS: usa o modelo do config.yaml quando disponível;
@@ -408,7 +410,7 @@ class Orchestrator:
             max_duration_seconds=float(self.settings.video.max_seconds),
             require_audio=True,
             max_size_mb=float(self.settings.cloudinary.max_video_mb),
-            strict=True,
+            strict=self.settings.quality.strict,
         )
 
         self.sm.advance(

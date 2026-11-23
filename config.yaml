@@ -91,3 +91,26 @@ cloudinary:
   stop_usage_percent: 85  # percentual de uso da cota para parar
     # Quando o uso da cota atinge este percentual (%), o pipeline para de enviar vídeos
     # para o Cloudinary e aguarda o próximo ciclo para evitar superar o limite do plano gratuito.
+
+quality:
+  enabled: true  # ativa os quality gates em strict=True
+    # Quando false, os quality gates (quadros pretos, silêncio, cena estática) são
+    # ignorados mesmo em validação strict.
+  strict: true  # aplica os quality gates na validação de vídeo
+    # Quando true, a validação rejeita vídeos pretos/silenciosos/estáticos.
+    # Pode ser desativado para permitir placeholders em desenvolvimento.
+  max_black_ratio: 0.50  # fração máxima de duração em quadros pretos
+    # Fração máxima da duração do vídeo que pode conter quadros pretos.
+    # 0.50 permite até metade do vídeo em preto.
+  max_continuous_black_seconds: 3.0  # preto contínuo máximo em segundos
+    # Duração máxima de um segmento preto contínuo antes de rejeitar o vídeo.
+  min_mean_volume_db: -60.0  # volume médio mínimo em dB
+    # Volume médio mínimo aceito; abaixo disso o áudio é considerado silêncio.
+    # Valores mais altos (ex: -40) são mais rígidos.
+  dynamic_scene_samples: 5  # amostras de frames para detetar cena estática
+    # Quantidade de frames amostrados ao longo do vídeo para detetar conteúdo estático.
+  dynamic_scene_thumbnail_size: 160  # tamanho da miniatura para comparação de cena
+    # Tamanho (px) da miniatura quadrada usada na comparação byte-a-byte/pHash.
+  dynamic_scene_phash_threshold: 0.9  # similaridade pHash acima da qual é estático
+    # Similaridade perceptual acima da qual o vídeo é considerado estático.
+    # 0.9 = hash diferindo em menos de 10% dos bits.

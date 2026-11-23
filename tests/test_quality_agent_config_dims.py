@@ -14,6 +14,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from src.settings import QualitySettings
 from src.workflow.graph import quality_agent
 
 
@@ -32,6 +33,7 @@ def _state_com_transcrito(mp4_path: str) -> dict:
 def _fake_settings(width: int, height: int, fps: int):
     return SimpleNamespace(
         video=SimpleNamespace(width=width, height=height, fps=fps),
+        quality=QualitySettings(),
     )
 
 
@@ -69,7 +71,7 @@ def test_quality_agent_passa_dimensoes_personalizadas(
     assert kwargs["height"] == 1280
     assert kwargs["fps"] == 24.0
     assert kwargs["require_audio"] is True
-    assert kwargs["strict"] is False
+    assert kwargs["strict"] is False  # quality_agent do grafo permanece permissivo (baseline)
 
 
 # --------------------------------------------------------------------------- #
