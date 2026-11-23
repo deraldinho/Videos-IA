@@ -144,6 +144,29 @@ def supervisor(state: dict[str, Any]) -> dict[str, Any]:
         state["status"] = Stage.FAILED.value
         return state
 
+    # CP27 — Recuperação de falha: se houve erro recente (errors não vazio),
+    # há retries restantes e um agente está em execução (_step), roteia de
+    # volta para esse agente para nova tentativa, evitando loop infinito.
+    # Só se aplica quando o status ainda está em estágio de processamento
+    # (não chegou a um estado de conclusão como VALIDATED/APPROVED/PUBLISHED).
+    step = state.get("_step")
+    errors = state.get("errors") or []
+    retries = int(state.get("retries", 0))
+    status_conclusao = {
+        Stage.VALIDATED.value, Stage.APPROVED.value, Stage.UPLOADED.value,
+        Stage.QUEUED.value, Stage.PUBLISHED.value, Stage.RENDERED.value,
+        Stage.FAILED.value, Stage.ACTION_REQUIRED.value,
+    }
+    if (
+        step
+        and errors
+        and retries < MAX_RETRIES
+        and status not in status_conclusao
+    ):
+        state["retries"] = retries + 1
+        state["_next"] = step
+        return state
+
     # Publicacao concluida (real PUBLISHED ou agendado/mock QUEUED):
     # monitoramento → analitica → auditoria → fim.
     if status in {Stage.PUBLISHED.value, Stage.QUEUED.value}:
