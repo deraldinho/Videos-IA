@@ -60,6 +60,15 @@ class MockAnalyticsProvider:
         # Observed_at derivado do target_id para ser determinístico (mesmo target → mesmo instante)
         observed_at = f"2026-01-01T00:00:{h:02d}+00:00"
 
+        # publication_confirmed é True apenas quando o target foi publicado e
+        # confirmado remotamente (provenance="mock" nunca marca True sozinho;
+        # a confirmação vem do estado do target).
+        publication_confirmed = bool(
+            target.publication_confirmed_at
+            and target.local_state == "published"
+            and target.remote_status == "published"
+        )
+
         return MetricSnapshot(
             target_id=target.target_id,
             platform=target.platform,
@@ -73,6 +82,7 @@ class MockAnalyticsProvider:
                 "comments": comments,
             },
             observed_at=observed_at,
+            publication_confirmed=publication_confirmed,
         )
 
 

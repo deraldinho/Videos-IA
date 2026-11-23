@@ -137,17 +137,49 @@ class TikTokAdapter:
 
     # -------------------------------------------------------------- get_remote_status
     def get_remote_status(self, target: PublicationTarget) -> PublicationTarget:
-        """Consulta status remoto. Só marca 'published' com confirmação remota real."""
+        """Consulta status remoto. Só marca 'published' com confirmação remota real.
+
+        Em modo mock: nunca confirma como publicado sem dados remotos reais;
+        mantém o estado local atual e defined_at permanece None.
+
+        Em modo live: consulta a API remota real (via _remote_client se injetado).
+        Só marca local_state='published' quando remote_id + remote_status +
+        confirmed_at são fornecidos pela confirmação remota.
+        """
         if self.mock:
             # Mock: nunca confirma como publicado sem dados remotos reais
             target.local_state = target.local_state  # mantém o estado atual
             target.remote_status = target.remote_status or "scheduled"
             # confirmed_at permanece None em mock
+            target.publication_confirmed_at = None
             target.updated_at = _utc_now_iso()
             return target
 
-        # Live: consulta API remota real (não implementada por default)
-        target.error_message = "get_remote_status remoto não implementado para TikTok sem credenciais"
+        # Live: consulta API remota real
+        remote_client = getattr(self, "_remote_client", None)
+        if remote_client is None:
+            target.error_message = (
+                "get_remote_status remoto não implementado para TikTok sem credenciais "
+                "(inicie com _remote_client para consultar API real)"
+            )
+            target.updated_at = _utc_now_iso()
+            return target
+
+        try:
+            status = remote_client.get_video_status(target.video_id)
+            if status and status.get("published"):
+                target.remote_id = status.get("remote_id") or target.remote_id
+                target.remote_status = status.get("remote_status") or "published"
+                target.confirmed_at = status.get("confirmed_at") or _utc_now_iso()
+                target.publication_confirmed_at = target.confirmed_at
+                target.local_state = "published"
+                target.error_message = None
+            else:
+                target.remote_status = status.get("remote_status") if status else "pending"
+                target.error_message = "Vídeo ainda não confirmado como publicado remotamente"
+        except Exception as exc:  # noqa: BLE001
+            target.error_message = f"Falha ao consultar status remoto: {exc}"
+
         target.updated_at = _utc_now_iso()
         return target
 

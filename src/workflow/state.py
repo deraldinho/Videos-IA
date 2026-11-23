@@ -415,6 +415,8 @@ class PublicationTarget(BaseModel):
     cloudinary_id: Optional[str] = None
     buffer_post_id: Optional[str] = None
     buffer_post_state: Optional[str] = None
+    # Confirmação remota inequívoca de publicação (CP28)
+    publication_confirmed_at: Optional[str] = None
     created_at: str = Field(default_factory=_utc_now_iso)
     updated_at: str = Field(default_factory=_utc_now_iso)
 
@@ -445,6 +447,7 @@ class MetricSnapshot(BaseModel):
     observed_at: str = Field(default_factory=_utc_now_iso)
     source: str = Field(default="")  # nome do provedor de analytics
     provenance: str = Field(default="mock")  # mock | real | estimated | unavailable
+    publication_confirmed: bool = Field(default=False)  # vinculada a publicação confirmada remotamente
     metrics: dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=_utc_now_iso)
 
