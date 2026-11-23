@@ -190,7 +190,7 @@ class Orchestrator:
         # (idempotência da retomada assisted: o operador devolveu o JSON).
         row = self.db.get_video(video_id)
         current_status = row["status"]
-        if current_status == "SCRIPT_READY" and row.get("script_json"):
+        if current_status == "SCRIPT_READY" and row["script_json"]:
             return ExecutionResult(
                 execution_id=execution_id, video_id=video_id,
                 stage="script", status="SCRIPT_READY", changed=False,
