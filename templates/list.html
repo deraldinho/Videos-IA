@@ -5,12 +5,26 @@
 <meta name="viewport" content="width=1080, height=1920">
 <title>{{title}}</title>
 <style>
+  :root {
+    --bg-start: #1a2a6c;
+    --bg-mid: #b21f1f;
+    --bg-end: #fdbb2d;
+    --accent: #ffd700;
+    --accent-glow: rgba(255,215,0,0.4);
+    --cta: #ffffff;
+    --text: #ffffff;
+    --text-dim: rgba(255,255,255,0.95);
+    --radius: 30px;
+    --safe-top: 120px;
+    --safe-bottom: 180px;
+    --safe-side: 60px;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 1080px; height: 1920px; overflow: hidden; }
   body {
     font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
-    color: #ffffff;
+    background: linear-gradient(135deg, var(--bg-start), var(--bg-mid), var(--bg-end));
+    color: var(--text);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -18,20 +32,34 @@
     text-align: center;
     position: relative;
   }
+  .safe {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    position: relative;
+    padding: var(--safe-top) var(--safe-side) var(--safe-bottom) var(--safe-side);
+    box-sizing: border-box;
+    z-index: 2;
+  }
   .badge {
     position: absolute; top: 60px; left: 60px;
-    background: #ffd700; color: #000;
-    padding: 10px 20px; border-radius: 30px;
+    background: var(--accent); color: #000;
+    padding: 10px 20px; border-radius: var(--radius);
     font-weight: 800; font-size: 1.1rem;
-    box-shadow: 0 4px 15px rgba(255,215,0,0.4);
+    box-shadow: 0 4px 15px var(--accent-glow);
     animation: bounce 2s infinite;
+    z-index: 3;
   }
   h1 { font-size: 2.4rem; line-height: 1.2; max-width: 900px; margin: 0 40px; }
   .list { margin-top: 40px; width: 900px; }
   .item {
     background: rgba(255,255,255,0.1);
     backdrop-filter: blur(8px);
-    border-left: 5px solid #ffd700;
+    border-left: 5px solid var(--accent);
     padding: 20px; margin: 12px 0;
     border-radius: 12px;
     font-size: 1.35rem;
@@ -39,12 +67,12 @@
     opacity: 0;
     animation: slideIn 0.6s ease-out forwards;
   }
-  .rank { display:inline-block; width: 40px; height: 40px; background: #ffd700; color: #000;
+  .rank { display:inline-block; width: 40px; height: 40px; background: var(--accent); color: #000;
           border-radius: 50%; text-align: center; line-height: 40px; font-weight: 900;
           margin-right: 16px; font-size: 1.2rem; }
-  p.sub { font-size: 1.3rem; margin-top: 30px; max-width: 860px; line-height: 1.5; opacity: 0.95; }
-  .hashtags { margin-top: 30px; font-size: 1.3rem; color: #ffd700; font-weight: 700; }
-  .cta { position: absolute; bottom: 120px; font-size: 1.5rem; font-weight: 800; color: #fff; }
+  p.sub { font-size: 1.3rem; margin-top: 30px; max-width: 860px; line-height: 1.5; color: var(--text-dim); }
+  .hashtags { margin-top: 30px; font-size: 1.3rem; color: var(--accent); font-weight: 700; }
+  .cta { position: absolute; bottom: 120px; font-size: 1.5rem; font-weight: 800; color: var(--cta); z-index: 3; }
   @keyframes bounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-10px);} }
   @keyframes slideIn { from{opacity:0;transform:translateX(-40px);} to{opacity:1;transform:translateX(0);} }
   .fade-in { animation: fadeIn 0.8s ease-out forwards; }
@@ -53,10 +81,12 @@
 </head>
 <body>
   <div class="badge fade-in">LISTA</div>
-  <h1 class="fade-in">{{title}}</h1>
-  <div class="list fade-in">{{list_items}}</div>
-  <p class="sub fade-in">{{description}}</p>
-  <div class="hashtags fade-in">{{hashtags}}</div>
+  <div class="safe fade-in">
+    <h1 class="fade-in">{{title}}</h1>
+    <div class="list fade-in">{{list_items}}</div>
+    <p class="sub fade-in">{{description}}</p>
+    <div class="hashtags fade-in">{{hashtags}}</div>
+  </div>
   <div class="cta fade-in">Qual foi o seu favorito?</div>
 </body>
 </html>
