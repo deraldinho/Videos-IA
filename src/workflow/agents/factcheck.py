@@ -14,8 +14,19 @@ class FactCheckAgent(BaseAgent):
     Responsabilidades (CP06):
     - Consome ``script`` e ``idea`` do estado.
     - Produz ``factcheck`` com veredito (ok/pendente/rejeitado) e notas.
-    - Não faz checagem real externa: simula verificação determinística.
+    - **Modo atual (offline/mock):** simula verificação determinística e aprova
+      todas as ideias sem checagem externa real.
+    - **Para produção:** substituir a seção de verificação simulada por chamadas
+      a serviços de fact-checking reais (ex.: fact-check APIs, fontes de
+      referência verificadas, cross-reference com múltiplas fontes). Cada
+      afirmação do roteiro deve ser verificada contra fontes externas e o
+      veredito deve refletir o resultado real.
     - Avança current_stage para FACTCHECKED.
+
+    ⚠️ Limitação de segurança: nenhuma chamada de rede externa é feita por
+    padrão. Ative a verificação real apenas com credenciais e autorização
+    explícita do operador. Nunca aprove conteúdo factual sem verificação
+    externa em modo AUTO.
     """
 
     def __init__(self) -> None:

@@ -14,11 +14,18 @@ class ResearchAgent(BaseAgent):
     Responsabilidades (CP05):
     - Recebe o ``topic`` do estado.
     - Gera ``research_sources`` (lista de dicts com fonte, url, resumo).
-    - Não faz chamadas de rede reais: produz fontes simuladas/determinísticas
-      para que o pipeline rode offline. Em produção, esta é a camada a conectar
-      a um motor de busca real.
+    - **Modo atual (offline/mock):** produz fontes simuladas/determinísticas
+      para que o pipeline rode offline sem chamadas de rede.
+    - **Para produção:** substituir a seção de fontes simuladas por chamadas a
+      um motor de busca real (ex.: Google Custom Search, Bing, Brave Search) e
+      preencher ``url``, ``title`` e ``summary`` com dados reais. Cada fonte
+      deve conter uma URL verificável e um resumo extraído do conteúdo real.
     - Avança o status para IDEA_RESEARCHED (mapeado internamente via
       current_stage) e devolve o estado completo.
+
+    ⚠️ Limitação de segurança: nenhuma chamada de rede externa é feita por
+    padrão. Ative a verificação real apenas com credenciais e autorização
+    explícita do operador.
     """
 
     def __init__(self) -> None:
