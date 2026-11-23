@@ -53,6 +53,8 @@ NODE_HUMAN_APPROVAL = "human_approval"
 NODE_PUBLISHING = "publishing_agent"
 NODE_MONITORING = "monitoring_agent"
 NODE_AUDIT = "audit_agent"
+NODE_PUBLICATION_TARGETS = "publication_targets"
+NODE_ANALYTICS = "analytics"
 
 # Ordem determinística de estágios (supervisor roteia nesta sequência).
 STAGE_ORDER = [
@@ -72,6 +74,8 @@ STAGE_ORDER = [
     Stage.PUBLISHED.value,
     Stage.QUEUED.value,
     "MONITORED",
+    "TARGETS_PREPARADO",
+    "ANALYTICAS",
 ]
 
 
@@ -140,18 +144,34 @@ def supervisor(state: dict[str, Any]) -> dict[str, Any]:
         state["status"] = Stage.FAILED.value
         return state
 
-    # Publicação concluída (real PUBLISHED ou agendado/mock QUEUED):
-    # monitoramento → auditoria → fim.
+    # Publicacao concluida (real PUBLISHED ou agendado/mock QUEUED):
+    # monitoramento → analitica → auditoria → fim.
     if status in {Stage.PUBLISHED.value, Stage.QUEUED.value}:
         state["_next"] = NODE_MONITORING
         state["status"] = "MONITORED"
         return state
     if status == "MONITORED":
+        # CP25: apos o monitoramento, coletar metricas antes da auditoria.
+        # So vai para analytics quando o monitoramento acabou de rodar
+        # (_step == monitoring_agent). analytics ja rodou (_step == analytics_agent)
+        # ou um MONITORED simples (sem origem conhecida) vai direto à auditoria,
+        # preservando o roteamento anterior (MONITORED -> audit).
+        if state.get("_step") == "monitoring_agent":
+            state["_next"] = NODE_ANALYTICS
+            return state
+        if state.get("_step") == "analytics_agent":
+            state["_next"] = NODE_AUDIT
+            return state
         state["_next"] = NODE_AUDIT
         return state
 
-    # Já aprovado (mas ainda não publicado): publicar.
+    # Ja aprovado (mas ainda nao publicou): preparar targets multicanal, depois publicar.
     if approval == ApprovalStatus.APPROVED.value and status == Stage.APPROVED.value:
+        if state.get("targets_pending"):
+            # CP24: preparar targets multicanal antes de publicar em cada um.
+            state["targets_pending"] = False
+            state["_next"] = NODE_PUBLICATION_TARGETS
+            return state
         state["_next"] = NODE_PUBLISHING
         state["status"] = Stage.UPLOADING.value
         return state
@@ -373,7 +393,7 @@ def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
                 height=height,
                 fps=fps,
                 require_audio=True,
-                strict=False,
+                strict=True,
             )
             result = {
                 "valid": True,
@@ -424,6 +444,8 @@ def human_approval(state: dict[str, Any]) -> dict[str, Any]:
     if state["approval_status"] == "approved":
         state["status"] = Stage.APPROVED.value
         state["current_stage"] = Stage.APPROVED.value
+        # CP24: apos a aprovacao, preparar os targets multicanal antes de publicar.
+        state["targets_pending"] = True
     else:
         state["status"] = Stage.ACTION_REQUIRED.value
         state["current_stage"] = Stage.ACTION_REQUIRED.value
@@ -450,6 +472,70 @@ def monitoring_agent(state: dict[str, Any]) -> dict[str, Any]:
     out = MonitoringAgent()(state)
     out["_next"] = NODE_SUPERVISOR
     return out
+
+
+def publication_targets_agent(state: dict[str, Any]) -> dict[str, Any]:
+    """Prepara PublicationTargets para todos os canais de publicacao (CP24).
+
+    Usa PublicationManager para preparar targets por plataforma
+    (tiktok, youtube_shorts, instagram_reels) com isolamento de falha
+    e idempotencia. Apos preparar, volta ao supervisor, que roteia para
+    o publishing_agent (publicar em cada target).
+    """
+    from src.workflow.publication import (
+        InstagramReelsAdapter,
+        PublicationManager,
+        TikTokAdapter,
+        YouTubeShortsAdapter,
+    )
+
+    state = _ensure_state(state)
+    video_id = state["video_id"]
+    platforms = ["tiktok", "youtube_shorts", "instagram_reels"]
+
+    manager = PublicationManager(
+        [
+            TikTokAdapter(live=False),
+            YouTubeShortsAdapter(live=False),
+            InstagramReelsAdapter(live=False),
+        ]
+    )
+    targets = manager.prepare_targets(
+        state, video_id=video_id, platforms=platforms
+    )
+
+    # Garante que os targets estejam persistidos no estado (prepare_targets ja o faz)
+    # e marca o fluxo como pronto para publicacao em cada target.
+    state["publication_targets"] = [
+        t.model_dump(mode="json") for t in targets
+    ]
+    state["status"] = Stage.APPROVED.value
+    state["current_stage"] = Stage.APPROVED.value
+    state["targets_pending"] = False
+    state["_next"] = NODE_SUPERVISOR
+    state["_step"] = "publication_targets_agent"
+    return state
+
+
+def analytics_agent(state: dict[str, Any]) -> dict[str, Any]:
+    """Coleta metricas de todos os targets publicados (CP25).
+
+    Usa AnalyticsManager (MockAnalyticsProvider) para coletar metricas
+    dos targets publicados/agendados e consolidar no estado
+    (state['metric_snapshots']). Apos coletar, volta ao supervisor, que
+    roteia para o audit_agent.
+    """
+    from src.workflow.analytics import AnalyticsManager, MockAnalyticsProvider
+
+    state = _ensure_state(state)
+    manager = AnalyticsManager([MockAnalyticsProvider()])
+    state = manager.consolidate(state)
+
+    state["status"] = Stage.MONITORED.value
+    state["current_stage"] = Stage.MONITORED.value
+    state["_next"] = NODE_SUPERVISOR
+    state["_step"] = "analytics_agent"
+    return state
 
 
 def audit_agent(state: dict[str, Any]) -> dict[str, Any]:
@@ -483,8 +569,8 @@ def _route(state: dict[str, Any]) -> str:
     valid_nodes = {
         NODE_RESEARCH, NODE_IDEA, NODE_FACTCHECK, NODE_SCRIPT, NODE_VOICE,
         NODE_VISUAL, NODE_RENDER, NODE_TRANSCRIPTION, NODE_QUALITY,
-        NODE_COMPLIANCE, NODE_HUMAN_APPROVAL, NODE_PUBLISHING, NODE_MONITORING,
-        NODE_AUDIT,
+        NODE_COMPLIANCE, NODE_HUMAN_APPROVAL, NODE_PUBLICATION_TARGETS,
+        NODE_PUBLISHING, NODE_MONITORING, NODE_ANALYTICS, NODE_AUDIT,
     }
     if nxt in valid_nodes:
         return nxt
@@ -512,6 +598,8 @@ def build_graph(checkpointer: SqliteSaver | None = None):
     builder.add_node(NODE_PUBLISHING, publishing_agent)
     builder.add_node(NODE_MONITORING, monitoring_agent)
     builder.add_node(NODE_AUDIT, audit_agent)
+    builder.add_node(NODE_PUBLICATION_TARGETS, publication_targets_agent)
+    builder.add_node(NODE_ANALYTICS, analytics_agent)
 
     builder.add_edge(START, NODE_SUPERVISOR)
     builder.add_conditional_edges(
@@ -529,8 +617,10 @@ def build_graph(checkpointer: SqliteSaver | None = None):
             NODE_QUALITY: NODE_QUALITY,
             NODE_COMPLIANCE: NODE_COMPLIANCE,
             NODE_HUMAN_APPROVAL: NODE_HUMAN_APPROVAL,
+            NODE_PUBLICATION_TARGETS: NODE_PUBLICATION_TARGETS,
             NODE_PUBLISHING: NODE_PUBLISHING,
             NODE_MONITORING: NODE_MONITORING,
+            NODE_ANALYTICS: NODE_ANALYTICS,
             NODE_AUDIT: NODE_AUDIT,
             "__end__": END,
         },
@@ -547,6 +637,8 @@ def build_graph(checkpointer: SqliteSaver | None = None):
     builder.add_edge(NODE_COMPLIANCE, NODE_SUPERVISOR)
     builder.add_edge(NODE_PUBLISHING, NODE_SUPERVISOR)
     builder.add_edge(NODE_MONITORING, NODE_SUPERVISOR)
+    builder.add_edge(NODE_PUBLICATION_TARGETS, NODE_SUPERVISOR)
+    builder.add_edge(NODE_ANALYTICS, NODE_SUPERVISOR)
     builder.add_edge(NODE_AUDIT, END)
     builder.add_edge(NODE_HUMAN_APPROVAL, NODE_SUPERVISOR)
 
@@ -582,5 +674,7 @@ __all__ = [
     "NODE_PUBLISHING",
     "NODE_MONITORING",
     "NODE_AUDIT",
+    "NODE_PUBLICATION_TARGETS",
+    "NODE_ANALYTICS",
     "STAGE_ORDER",
 ]

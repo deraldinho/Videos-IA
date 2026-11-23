@@ -35,6 +35,14 @@ class PublishingAgent(BaseAgent):
             return self._add_error(state, "publish",
                                    "Publicação bloqueada pelo agente de conformidade")
 
+        # --- Gate de qualidade: não publicar se validação falhou ---------------
+        validation_results = state.get("validation_results")
+        if validation_results and not validation_results.get("valid", False):
+            errors = validation_results.get("errors", [])
+            msg = "; ".join(errors) if errors else "qualidade do vídeo não aprovada"
+            return self._add_error(state, "publish",
+                                   f"Gate de qualidade não aprovado: {msg}")
+
         mp4_path = None
         if video_assets:
             mp4_path = video_assets[-1].get("mp4_path")
