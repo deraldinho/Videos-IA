@@ -1,13 +1,13 @@
-mode: REVIEW  # DRY_RUN | REVIEW | AUTO
+mode: AUTO  # DRY_RUN | REVIEW | AUTO
   # Determina o modo de operação do autopilot:
   # - DRY_RUN: nenhuma operação real de upload/publicação; tudo é mockado.
   # - REVIEW: revisão manual via FCC-Claude (modo assisted). Prompts são gravados
   #   em data/inbox/ para o operador submeter JSON de resposta.
   # - AUTO: execução totalmente automática (requer auto_enabled: true e credenciais).
-live_enabled: false  # libera operações externas Cloudinary/Buffer; ative deliberadamente
-  # Quando false, Cloudinary e Buffer retornam URLs/mock simulados. Em modo AUTO,
-  # deve ser true para uploads reais na TikTok.
-auto_enabled: false  # requerido para mode: AUTO
+live_enabled: true  # libera operações externas Cloudinary/Buffer; ative deliberadamente
+  # Quando true, Cloudinary e Buffer fazem upload/agendamento reais na TikTok.
+  # Requer credenciais válidas no .env (CLOUDINARY_*, BUFFER_*).
+auto_enabled: true  # requerido para mode: AUTO
   # Ative true apenas no modo AUTO. Em REVIEW/DRY_RUN, define se o pipeline pode
   # avançar automaticamente ou exigir aprovação manual em cada etapa.
 niche: curiosidades e explicações sobre tecnologia do cotidiano
