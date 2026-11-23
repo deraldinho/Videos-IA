@@ -195,6 +195,22 @@ def test_supervisor_routes_to_audit_when_already_approved():
     assert out["_next"] == "audit_agent"
 
 
+def test_supervisor_encerra_em_falho_quando_retries_esgotados():
+    """Esgotadas as retentativas, o supervisor encerra em FAILED (não faz loop infinito).
+
+    Antes da correção, um estágio em falha repetida (ex.: render sem o navegador
+    headless) fazia o supervisor rotear para si mesmo indefinidamente no RENDERING.
+    Agora MAX_RETRIES é aplicado e o gráfico termina em FAILED em vez de loopar.
+    """
+    state = _initial_state("vid-retries-exhaustos")
+    state["status"] = Stage.RENDERING.value
+    state["retries"] = MAX_RETRIES  # esgotado
+    state["video_assets"] = []  # sem MP4 -> antes fazia loop infinito no RENDERING
+    out = supervisor(state)
+    assert out["status"] == Stage.FAILED.value
+    assert out["_next"] == "__end__"
+
+
 # --------------------------------------------------------------------------- #
 # Agentes unitários                                                           #
 # --------------------------------------------------------------------------- #

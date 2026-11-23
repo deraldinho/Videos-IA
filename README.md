@@ -58,6 +58,7 @@ tiktok-automation/
 ├── requirements.txt            # Dependências Python
 ├── src/
 │   ├── settings.py             # Carrega config.yaml + .env (Settings imutável)
+│   ├── server.py               # Servidor web FastAPI + Uvicorn (UI ao vivo)
 │   ├── database.py             # SQLite: vídeos, estados, histórico, agendamentos
 │   ├── state_machine.py        # Transições de estado validadas + idempotência
 │   ├── orchestrator.py         # Execução etapa a etapa com ID de execução único
@@ -98,7 +99,7 @@ tiktok-automation/
 │       ├── cloudinary_client.py # Upload, URL pública, dedup, cota gratuita
 │       └── buffer_client.py     # GraphQL Buffer: canal TikTok, fila, estados
 ├── templates/                  # Templates HTML/CSS (curiosidade, lista, historia, explicacao, qa)
-├── tests/                      # 142 testes unitários (pytest): CP01-CP12
+├── tests/                      # 204 testes unitários (pytest): CP01-CP12, CP13-CP21
 ├── data/inbox/                 # Roteiros entregues pelo FCC-Claude (modo assisted)
 ├── output/                     # drafts/, approved/, published/, failed/
 ├── ops/
@@ -141,6 +142,9 @@ python main.py metrics
 
 # Tick do agendador (alias de run-daily)
 python main.py tick
+
+# Inicia o servidor web da UI ao vivo (FastAPI + Uvicorn)
+python main.py serve --host 127.0.0.1 --port 8000
 
 # Ajuda
 python main.py --help
@@ -228,7 +232,7 @@ Em Linux/macOS, use `ops/install-cron.sh` (imprime a linha de cron; você adicio
 pytest tests/ -v
 ```
 
-Suíte: **142 testes** cobrindo todos os CPs (CP01-CP12):
+Suíte: **204 testes** cobrindo todos os CPs (CP01-CP21):
 - CP01 baseline: settings, database, state_machine, scheduler, scripts, ai provider, integrações (mock), vídeo (TTS/validator), orchestrator (73 testes)
 - CP02: P0/P1 defeitos corrigidos + testes de regressão (10 testes)
 - CP03: contratos Pydantic tipados (WorkflowState, Script, AudioAsset, VideoAsset, etc.)
@@ -236,6 +240,7 @@ Suíte: **142 testes** cobrindo todos os CPs (CP01-CP12):
 - CP05-CP10: 12 agentes especializados, grafo de 15 nós, roteamento por estágio (36 testes)
 - CP11: logging JSON, métricas, circuit breaker, retry, health checks, dashboard HTML (9 testes)
 - CP12: observabilidade, dashboard administrativo, auditoria final (13 testes)
+- CP13-CP21: renderização real (Chromium/Puppeteer + FFmpeg), quality gates, circuit breaker + retry externo, validador inicializado, assisted resume, publication settings, qualidade configurável, resiliência integrada (48 testes)
 
 Zero regressões entre CPs.
 
@@ -287,10 +292,6 @@ Nenhuma operação real contra Cloudinary, Buffer ou TikTok é executada durante
 - **TikTok:** alguns posts exigem confirmação no app (`ACTION_REQUIRED`).
 - **Piper TTS:** local, gratuito, offline (quando voz pt-BR disponível).
 - **NVIDIA NIM:** use apenas cota autorizada pelo usuário (`allow_nvidia_requests: true`).
-
-## Não-publicação real
-
-Nenhuma operação real contra Cloudinary, Buffer ou TikTok é executada durante o desenvolvimento. Todas as integrações externas usam mocks até que você forneça credenciais e autorize explicitamente via `live_enabled: true`.
 
 ## Fases do plano (Superpowers)
 

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from src.errors import PipelineError
+from src.settings import Settings, load_settings
 
 
 class HTMLRenderer:
@@ -30,11 +31,22 @@ class HTMLRenderer:
     def __init__(
         self,
         *,
+        settings: Settings | None = None,
         node_bin: str = "node",
         ffmpeg_bin: str = "ffmpeg",
         templates_dir: Path | str = "templates",
         output_dir: Path | str = "output/drafts",
     ) -> None:
+        self.settings = settings
+        if settings is not None:
+            self.video_width = int(settings.video.width)
+            self.video_height = int(settings.video.height)
+            self.video_fps = int(settings.video.fps)
+        else:
+            # Defaults iguais aos valores anteriormente hardcoded.
+            self.video_width = 1080
+            self.video_height = 1920
+            self.video_fps = 30
         self.node_bin = node_bin
         self.ffmpeg_bin = ffmpeg_bin
         self.templates_dir = Path(templates_dir).resolve()
@@ -232,7 +244,7 @@ class HTMLRenderer:
 
             # Codifica os frames em MP4 (sem áudio) num arquivo temporário.
             video_only = self.output_dir / f"video_{uuid.uuid4().hex[:8]}.mp4"
-            fps = 30
+            fps = self.video_fps
             pattern = str(frames_dir / "frame-%04d.png")
             cmd = [
                 ffmpeg, "-y", "-framerate", str(fps),
@@ -296,8 +308,7 @@ class HTMLRenderer:
 
         return output_path
 
-    @staticmethod
-    def _capture_script(html_path: Path, duration_seconds: float, scenes: list) -> str:
+    def _capture_script(self, html_path: Path, duration_seconds: float, scenes: list) -> str:
         """Gera o script Node que captura frames do HTML renderizado.
 
         Avança entre as cenas do storyboard ao longo da duração e grava um
@@ -316,12 +327,12 @@ class HTMLRenderer:
 
   const browser = await puppeteer.launch({{ executablePath, headless: 'new' }});
   const page = await browser.newPage();
-  await page.setViewport({{ width: 1080, height: 1920 }});
+  await page.setViewport({{ width: {self.video_width}, height: {self.video_height} }});
   const htmlPath = '{html_path}'.replace(/\\\\/g, '/');
   await page.goto('file:///' + htmlPath, {{ waitUntil: 'networkidle0' }});
 
   const duration = {float(duration_seconds)};
-  const fps = 30;
+  const fps = {self.video_fps};
   const total = Math.ceil(duration * fps);
   const scenes = {scenes_json};
 
@@ -380,9 +391,9 @@ class HTMLRenderer:
         seconds = max(1.0, float(duration_seconds))
         cmd = [
             ffmpeg, "-y",
-            "-f", "lavfi", "-i", f"color=c=black:s=1080x1920:r=30:d={seconds}",
+            "-f", "lavfi", "-i", f"color=c=black:s={self.video_width}x{self.video_height}:r={self.video_fps}:d={seconds}",
             "-f", "lavfi", "-i", f"anullsrc=r=22050:d={seconds}",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(self.video_fps),
             "-c:a", "aac", "-shortest",
             str(output_path),
         ]

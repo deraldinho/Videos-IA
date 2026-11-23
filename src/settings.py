@@ -57,6 +57,59 @@ class VideoSettings:
 
 
 @dataclass(frozen=True)
+class QualitySettings:
+    """Limites configuráveis dos quality gates aplicados em ``strict=True``.
+
+    Espelha os campos de :class:`src.video.validator.QualityThresholds` e
+    adiciona flags de ativação/rigor, de modo que os limiares possam ser
+    lidos de ``config.yaml`` (seção ``quality``) em vez de permanecerem
+    hardcoded. Os defaults iguais aos atuais de ``QualityThresholds``
+    preservam o comportamento por omissão (sem regressão).
+    """
+
+    enabled: bool = True
+    """Ativa ou desativa todos os quality gates em strict=True."""
+
+    strict: bool = True
+    """Quando True, aplica os quality gates (quadros pretos, silêncio, cena estática)."""
+
+    max_black_ratio: float = 0.50
+    """Fração máxima da duração que pode estar em quadros pretos."""
+
+    max_continuous_black_seconds: float = 3.0
+    """Duração máxima (s) de preto contínuo permitida."""
+
+    min_mean_volume_db: float = -60.0
+    """Volume médio mínimo (dB) aceito; abaixo disso o áudio é considerado silêncio."""
+
+    dynamic_scene_samples: int = 5
+    """Quantidade de amostras de frames ao longo do vídeo para detetar cena estática."""
+
+    dynamic_scene_thumbnail_size: int = 160
+    """Tamanho (px) da miniatura quadrada usada na comparação de cena estática."""
+
+    dynamic_scene_phash_threshold: float = 0.9
+    """Similaridade pHash acima da qual o vídeo é considerado estático."""
+
+    def to_thresholds(self) -> QualityThresholds:
+        """Converte para :class:`src.video.validator.QualityThresholds`.
+
+        Importação local evita acoplar settings.py ao módulo validator no
+        tempo de importação (validator não importa settings).
+        """
+        from src.video.validator import QualityThresholds  # noqa: PLC0415
+
+        return QualityThresholds(
+            max_black_ratio=self.max_black_ratio,
+            max_continuous_black_seconds=self.max_continuous_black_seconds,
+            min_mean_volume_db=self.min_mean_volume_db,
+            dynamic_scene_samples=self.dynamic_scene_samples,
+            dynamic_scene_thumbnail_size=self.dynamic_scene_thumbnail_size,
+            dynamic_scene_phash_threshold=self.dynamic_scene_phash_threshold,
+        )
+
+
+@dataclass(frozen=True)
 class PublicationSettings:
     timezone: str = "America/Sao_Paulo"
     production_time: time = time(8, 0)
@@ -97,6 +150,7 @@ class Settings:
     video: VideoSettings = field(default_factory=VideoSettings)
     publication: PublicationSettings = field(default_factory=PublicationSettings)
     cloudinary: CloudinarySettings = field(default_factory=CloudinarySettings)
+    quality: QualitySettings = field(default_factory=QualitySettings)
     raw: dict = field(default_factory=dict)
 
 
@@ -334,6 +388,25 @@ def load_settings(
         api_secret=_env("CLOUDINARY_API_SECRET"),
     )
 
+    # --- Quality Gates (limites configuráveis via settings) ---
+    quality_raw = raw.get("quality", {}) or {}
+    quality = QualitySettings(
+        enabled=bool(quality_raw.get("enabled", True)),
+        strict=bool(quality_raw.get("strict", True)),
+        max_black_ratio=float(quality_raw.get("max_black_ratio", 0.50)),
+        max_continuous_black_seconds=float(
+            quality_raw.get("max_continuous_black_seconds", 3.0)
+        ),
+        min_mean_volume_db=float(quality_raw.get("min_mean_volume_db", -60.0)),
+        dynamic_scene_samples=int(quality_raw.get("dynamic_scene_samples", 5)),
+        dynamic_scene_thumbnail_size=int(
+            quality_raw.get("dynamic_scene_thumbnail_size", 160)
+        ),
+        dynamic_scene_phash_threshold=float(
+            quality_raw.get("dynamic_scene_phash_threshold", 0.9)
+        ),
+    )
+
     return Settings(
         mode=mode,
         live_enabled=live_enabled,
@@ -344,6 +417,7 @@ def load_settings(
         video=video,
         publication=publication,
         cloudinary=cloudinary,
+        quality=quality,
         raw=raw,
     )
 
@@ -385,6 +459,7 @@ __all__ = [
     "VideoSettings",
     "PublicationSettings",
     "CloudinarySettings",
+    "QualitySettings",
     "Settings",
     "load_settings",
     "require_cloudinary_credentials",

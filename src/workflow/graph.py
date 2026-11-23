@@ -120,6 +120,26 @@ def supervisor(state: dict[str, Any]) -> dict[str, Any]:
     compliance = state.get("compliance") or {}
     blocked = bool(compliance.get("blocked"))
 
+    # Limite de retentativas (MAX_RETRIES). Quando as tentativas se esgotam
+    # e o vídeo ainda não atingiu um estado terminal nem está à espera de
+    # decisão humana, encerra em FAILED. Sem isto, um estágio que falha
+    # repetidamente (ex.: render sem navegador headless) faz o supervisor
+    # rotear para si mesmo indefinidamente (loop infinito). MAX_RETRIES e
+    # _retries_left() estavam definidos mas nunca eram aplicados.
+    if (
+        not _retries_left(state)
+        and status
+        not in {
+            Stage.FAILED.value,
+            Stage.PUBLISHED.value,
+            Stage.AWAITING_APPROVAL.value,
+            Stage.ACTION_REQUIRED.value,
+        }
+    ):
+        state["_next"] = "__end__"
+        state["status"] = Stage.FAILED.value
+        return state
+
     # Publicação concluída (real PUBLISHED ou agendado/mock QUEUED):
     # monitoramento → auditoria → fim.
     if status in {Stage.PUBLISHED.value, Stage.QUEUED.value}:
@@ -330,6 +350,7 @@ def transcription_agent(state: dict[str, Any]) -> dict[str, Any]:
 def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
     """Valida qualidade do MP4 (reuso do FFprobeValidator) quando houver vídeo."""
     from src.video.validator import FFprobeValidator
+    from src.settings import load_settings
 
     state = _ensure_state(state)
     mp4_path = state.get("video_assets", [{}])[-1].get("mp4_path") if state.get("video_assets") else None
@@ -339,11 +360,18 @@ def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
 
         validator = FFprobeValidator()
         try:
+            settings = load_settings()
+            width = settings.video.width
+            height = settings.video.height
+            fps = float(settings.video.fps)
+        except Exception:  # noqa: BLE001 - settings indisponível, defaults seguros
+            width, height, fps = 1080, 1920, 30.0
+        try:
             info = validator.validate_tiktok(
                 Path(mp4_path),
-                width=1080,
-                height=1920,
-                fps=30.0,
+                width=width,
+                height=height,
+                fps=fps,
                 require_audio=True,
                 strict=False,
             )

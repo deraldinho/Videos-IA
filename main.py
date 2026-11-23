@@ -84,6 +84,11 @@ def _build_parser() -> argparse.ArgumentParser:
     # metrics
     sub.add_parser("metrics", help="Mostra métricas operacionais coletadas em memória.")
 
+    # serve — inicia o servidor web da UI ao vivo (FastAPI + Uvicorn)
+    sv = sub.add_parser("serve", help="Inicia o servidor web da UI ao vivo.")
+    sv.add_argument("--host", default="127.0.0.1", help="Host do servidor (padrão: 127.0.0.1)")
+    sv.add_argument("--port", type=int, default=8000, help="Porta do servidor (padrão: 8000)")
+
     return p
 
 
@@ -142,16 +147,17 @@ def cmd_approve(orch: Orchestrator, args: argparse.Namespace) -> int:
 
 def cmd_schedule(orch: Orchestrator, _: argparse.Namespace) -> int:
     settings = orch.settings
+    publication = settings.publication
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
-    prod_day = valid_production_day(settings, now)
+    prod_day = valid_production_day(publication, now)
     if prod_day is None:
         print("Hoje não é um dia de produção (fora de production_days).")
         return 0
-    print(f"Dia de produção: {prod_day} (fuso {settings.publication.timezone})")
-    print(f"Slots configurados: {', '.join(str(t) for t in settings.publication.publish_times)}")
-    print(f"Limite: {settings.publication.videos_per_day} vídeos/dia | Fila: {settings.publication.queue_limit} pendentes")
-    slot = next_slot(settings, now)
+    print(f"Dia de produção: {prod_day} (fuso {publication.timezone})")
+    print(f"Slots configurados: {', '.join(str(t) for t in publication.publish_times)}")
+    print(f"Limite: {publication.videos_per_day} vídeos/dia | Fila: {publication.queue_limit} pendentes")
+    slot = next_slot(publication, now)
     if slot:
         print(f"Próximo slot disponível: {slot.isoformat()} UTC")
     else:
@@ -192,13 +198,14 @@ def cmd_run_daily(orch: Orchestrator, _: argparse.Namespace) -> int:
     """Executa o pipeline diário: processa vídeos em AWAITING_APPROVAL (se AUTO)
     e avança os que estão em estágios anteriores."""
     settings = orch.settings
+    publication = settings.publication
     if settings.mode == "AUTO" and not settings.auto_enabled:
         print("ERRO: modo AUTO requer auto_enabled: true no config.yaml.")
         return 1
 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
-    prod_day = valid_production_day(settings, now)
+    prod_day = valid_production_day(publication, now)
     if prod_day is None:
         print("Hoje não é dia de produção. Nenhuma ação executada.")
         return 0
@@ -314,6 +321,16 @@ def cmd_metrics(_: Orchestrator, __: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(_: Orchestrator, args: argparse.Namespace) -> int:
+    """Inicia o servidor web da UI ao vivo (FastAPI + Uvicorn)."""
+    import uvicorn
+
+    print(f"Iniciando UI ao vivo em http://{args.host}:{args.port}")
+    print(f"Docs disponíveis em http://{args.host}:{args.port}/docs")
+    uvicorn.run("src.server:app", host=args.host, port=args.port)
+    return 0
+
+
 COMMANDS = {
     "generate": cmd_generate,
     "review": cmd_review,
@@ -325,6 +342,7 @@ COMMANDS = {
     "health": cmd_health,
     "dashboard": cmd_dashboard,
     "metrics": cmd_metrics,
+    "serve": cmd_serve,
 }
 
 

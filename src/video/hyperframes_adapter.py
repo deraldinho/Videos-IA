@@ -41,12 +41,20 @@ class HyperFramesAdapter:
     def __init__(
         self,
         *,
+        settings: Settings | None = None,
         vendor_dir: Path | str | None = None,
         node_bin: str = "node",
         ffmpeg_bin: str = "ffmpeg",
         output_dir: Path | str = "output/drafts",
-        settings: Settings | None = None,
     ) -> None:
+        # Dimensões de vídeo: do settings (config.yaml) quando disponível, senão
+        # defaults idênticos aos valores anteriormente hardcoded (30/1080/1920).
+        if settings is None:
+            try:
+                settings = load_settings()
+            except Exception:  # config indisponível: mantém defaults seguros
+                settings = None
+        self.settings = settings
         self.node_bin = node_bin
         self.ffmpeg_bin = ffmpeg_bin
         self.output_dir = Path(output_dir).resolve()
@@ -56,15 +64,6 @@ class HyperFramesAdapter:
         if vendor_dir is None:
             vendor_dir = Path(__file__).resolve().parents[1] / "vendor" / "hyperframes"
         self.vendor_dir = Path(vendor_dir).resolve()
-
-        # Dimensões de vídeo: do settings (config.yaml) quando disponível, senão
-        # defaults idênticos aos valores anteriormente hardcoded (30/1080/1920).
-        if settings is None:
-            try:
-                settings = load_settings()
-            except Exception:  # config indisponível: mantém defaults seguros
-                settings = None
-        self.settings = settings
         if settings is not None:
             self.video_width = int(settings.video.width)
             self.video_height = int(settings.video.height)
@@ -80,6 +79,7 @@ class HyperFramesAdapter:
             ffmpeg_bin=ffmpeg_bin,
             templates_dir="templates",
             output_dir=self.output_dir,
+            settings=self.settings,
         )
 
     # ------------------------------------------------------------------ #
