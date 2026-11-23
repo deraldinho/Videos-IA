@@ -117,6 +117,15 @@ class Orchestrator:
         )
         self.catalog = self._load_catalog()
 
+        # Cliente Piper TTS: usa o modelo do config.yaml quando disponível;
+        # em REVIEW/DRY_RUN gera silêncio fallback para não bloquear o pipeline.
+        self.tts = PiperTTS(
+            piper_bin="piper",
+            model_path=self.settings.video.piper_model,
+            output_dir=Path("output/drafts") / "tts",
+            require_real=False,
+        )
+
     # ------------------------------------------------------------------ #
     # Resiliência: circuit breaker + retry para serviços externos        #
     # ------------------------------------------------------------------ #
@@ -135,15 +144,6 @@ class Orchestrator:
             base_delay_seconds=0.5,
             max_delay_seconds=5.0,
             retryable_exceptions=(Exception,),
-        )
-
-    # Cliente Piper TTS: usa o modelo do config.yaml quando disponível;
-    # em REVIEW/DRY_RUN gera silêncio fallback para não bloquear o pipeline.
-        self.tts = PiperTTS(
-            piper_bin="piper",
-            model_path=self.settings.video.piper_model,
-            output_dir=Path("output/drafts") / "tts",
-            require_real=False,
         )
 
     def _load_catalog(self):

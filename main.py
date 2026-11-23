@@ -84,6 +84,11 @@ def _build_parser() -> argparse.ArgumentParser:
     # metrics
     sub.add_parser("metrics", help="Mostra métricas operacionais coletadas em memória.")
 
+    # serve — inicia o servidor web da UI ao vivo (FastAPI + Uvicorn)
+    sv = sub.add_parser("serve", help="Inicia o servidor web da UI ao vivo.")
+    sv.add_argument("--host", default="127.0.0.1", help="Host do servidor (padrão: 127.0.0.1)")
+    sv.add_argument("--port", type=int, default=8000, help="Porta do servidor (padrão: 8000)")
+
     return p
 
 
@@ -316,6 +321,16 @@ def cmd_metrics(_: Orchestrator, __: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(_: Orchestrator, args: argparse.Namespace) -> int:
+    """Inicia o servidor web da UI ao vivo (FastAPI + Uvicorn)."""
+    import uvicorn
+
+    print(f"Iniciando UI ao vivo em http://{args.host}:{args.port}")
+    print(f"Docs disponíveis em http://{args.host}:{args.port}/docs")
+    uvicorn.run("src.server:app", host=args.host, port=args.port)
+    return 0
+
+
 COMMANDS = {
     "generate": cmd_generate,
     "review": cmd_review,
@@ -327,6 +342,7 @@ COMMANDS = {
     "health": cmd_health,
     "dashboard": cmd_dashboard,
     "metrics": cmd_metrics,
+    "serve": cmd_serve,
 }
 
 
