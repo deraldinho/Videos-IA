@@ -94,8 +94,12 @@ class Orchestrator:
             settings=self.settings,
         )
         self.renderer = HTMLRenderer(settings=self.settings)
-        # Validador de MP4 com thresholds/strict derivados do settings (CP18).
-        self.validator = FFprobeValidator(thresholds=self.settings.quality.to_thresholds())
+        # Validador de MP4 com thresholds/strict derivados do settings (CP18)
+        # e ffprobe_bin do settings.video (CP19).
+        self.validator = FFprobeValidator(
+            ffprobe_bin=self.settings.video.ffprobe,
+            thresholds=self.settings.quality.to_thresholds(),
+        )
         self.catalog = self._load_catalog()
 
     # Cliente Piper TTS: usa o modelo do config.yaml quando disponível;
