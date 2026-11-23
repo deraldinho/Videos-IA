@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from src.errors import PipelineError
-from src.settings import Settings
+from src.settings import Settings, load_settings
 
 
 class HTMLRenderer:
