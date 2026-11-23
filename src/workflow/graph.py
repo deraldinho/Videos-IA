@@ -120,6 +120,26 @@ def supervisor(state: dict[str, Any]) -> dict[str, Any]:
     compliance = state.get("compliance") or {}
     blocked = bool(compliance.get("blocked"))
 
+    # Limite de retentativas (MAX_RETRIES). Quando as tentativas se esgotam
+    # e o vídeo ainda não atingiu um estado terminal nem está à espera de
+    # decisão humana, encerra em FAILED. Sem isto, um estágio que falha
+    # repetidamente (ex.: render sem navegador headless) faz o supervisor
+    # rotear para si mesmo indefinidamente (loop infinito). MAX_RETRIES e
+    # _retries_left() estavam definidos mas nunca eram aplicados.
+    if (
+        not _retries_left(state)
+        and status
+        not in {
+            Stage.FAILED.value,
+            Stage.PUBLISHED.value,
+            Stage.AWAITING_APPROVAL.value,
+            Stage.ACTION_REQUIRED.value,
+        }
+    ):
+        state["_next"] = "__end__"
+        state["status"] = Stage.FAILED.value
+        return state
+
     # Publicação concluída (real PUBLISHED ou agendado/mock QUEUED):
     # monitoramento → auditoria → fim.
     if status in {Stage.PUBLISHED.value, Stage.QUEUED.value}:
