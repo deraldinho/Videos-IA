@@ -18,25 +18,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.contracts import VIDEO_STATES, Stage
+
 
 WORKFLOW_VERSION = "1.0.0"
-
-VIDEO_STATES = (
-    "IDEA_CREATED",
-    "SCRIPT_READY",
-    "RENDERING",
-    "RENDERED",
-    "VALIDATED",
-    "AWAITING_APPROVAL",
-    "APPROVED",
-    "UPLOADING",
-    "UPLOADED",
-    "QUEUED",
-    "PUBLISHING",
-    "PUBLISHED",
-    "ACTION_REQUIRED",
-    "FAILED",
-)
 
 
 def _utc_now_iso() -> str:
@@ -46,25 +31,7 @@ def _utc_now_iso() -> str:
 # --------------------------------------------------------------------------- #
 # Enums                                                                       #
 # --------------------------------------------------------------------------- #
-class Stage(str, Enum):
-    """Estágios do pipeline (ordenados)."""
-
-    IDEA_CREATED = "IDEA_CREATED"
-    SCRIPT_READY = "SCRIPT_READY"
-    RENDERING = "RENDERING"
-    RENDERED = "RENDERED"
-    VALIDATED = "VALIDATED"
-    AWAITING_APPROVAL = "AWAITING_APPROVAL"
-    APPROVED = "APPROVED"
-    UPLOADING = "UPLOADING"
-    UPLOADED = "UPLOADED"
-    QUEUED = "QUEUED"
-    PUBLISHING = "PUBLISHING"
-    PUBLISHED = "PUBLISHED"
-    ACTION_REQUIRED = "ACTION_REQUIRED"
-    FAILED = "FAILED"
-
-
+# Stage é importado de src.contracts (fonte única de verdade).
 class ApprovalStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"

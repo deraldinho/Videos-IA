@@ -24,10 +24,10 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph, START
 from langgraph.types import Command, interrupt
 
+from src.contracts import MAX_RETRIES as CONTRACTS_MAX_RETRIES, Stage
 from src.workflow.events import emit, ACTION_STARTED, ACTION_COMPLETED, ACTION_ERROR
 from src.workflow.state import (
     ApprovalStatus,
-    Stage,
     WorkflowState,
     _utc_now_iso,
     dict_to_state,
@@ -36,7 +36,8 @@ from src.workflow.state import (
 )
 
 # Limite de retentativas por estágio antes de encerrar com erro.
-MAX_RETRIES = 3
+# Importado de src.contracts (fonte única de verdade).
+MAX_RETRIES = CONTRACTS_MAX_RETRIES
 
 
 def _instrumented(agent_name: str):

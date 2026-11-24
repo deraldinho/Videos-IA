@@ -28,6 +28,7 @@ from typing import Any, Optional
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
+from src.contracts import DB_STATE_ORDER
 from src.database import ALLOWED_TRANSITIONS, Database, VIDEO_STATES
 from src.errors import DuplicateError, PipelineError
 from src.settings import Settings, load_settings
@@ -59,22 +60,8 @@ _GRAPH_TO_DB_STATUS: dict[str, str] = {
 
 # Ordem linear dos estados do banco (para reconstruir caminhos válidos quando o
 # grafo salta estados intermediários).
-_DB_STATE_ORDER = [
-    Stage.IDEA_CREATED.value,
-    Stage.SCRIPT_READY.value,
-    Stage.RENDERING.value,
-    Stage.RENDERED.value,
-    Stage.VALIDATED.value,
-    Stage.AWAITING_APPROVAL.value,
-    Stage.APPROVED.value,
-    Stage.UPLOADING.value,
-    Stage.UPLOADED.value,
-    Stage.QUEUED.value,
-    Stage.PUBLISHING.value,
-    Stage.PUBLISHED.value,
-    Stage.ACTION_REQUIRED.value,
-    Stage.FAILED.value,
-]
+# Importado de src.contracts (fonte única de verdade).
+_DB_STATE_ORDER = DB_STATE_ORDER
 
 
 @dataclass(frozen=True)

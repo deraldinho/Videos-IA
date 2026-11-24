@@ -6,6 +6,7 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Any
 
+from src.contracts import MAX_RETRIES as CONTRACTS_MAX_RETRIES
 from src.workflow.state import _utc_now_iso
 
 
@@ -20,7 +21,7 @@ class BaseAgent(ABC):
     - devolve o estado completo (mutado) para o grafo
     """
 
-    def __init__(self, name: str, *, max_retries: int = 3) -> None:
+    def __init__(self, name: str, *, max_retries: int = CONTRACTS_MAX_RETRIES) -> None:
         self.name = name
         self.max_retries = max_retries
 

@@ -16,50 +16,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Optional
 
+from .contracts import ALLOWED_TRANSITIONS, TERMINAL_STATES, VIDEO_STATES
 from .errors import DuplicateError, PipelineError
 
-# Estados válidos do pipeline, em ordem de progresso.
-VIDEO_STATES: frozenset[str] = frozenset(
-    {
-        "IDEA_CREATED",
-        "SCRIPT_READY",
-        "RENDERING",
-        "RENDERED",
-        "VALIDATED",
-        "AWAITING_APPROVAL",
-        "APPROVED",
-        "UPLOADING",
-        "UPLOADED",
-        "QUEUED",
-        "PUBLISHING",
-        "PUBLISHED",
-        "ACTION_REQUIRED",
-        "FAILED",
-    }
-)
-
-# Estados terminais: um vídeo neles nunca é considerado estagnado, mesmo com
-# updated_at antigo (já atingiu um desfecho: publicado, falhou ou requer ação).
-TERMINAL_STATES: frozenset[str] = frozenset({"PUBLISHED", "FAILED", "ACTION_REQUIRED"})
-
-# Transições permitidas: origem -> conjunto de destinos possíveis.
-ALLOWED_TRANSITIONS: Mapping[str, frozenset[str]] = {
-    "IDEA_CREATED": {"SCRIPT_READY", "FAILED"},
-    "SCRIPT_READY": {"RENDERING", "FAILED"},
-    "RENDERING": {"RENDERED", "FAILED"},
-    "RENDERED": {"VALIDATED", "FAILED"},
-    "VALIDATED": {"AWAITING_APPROVAL", "FAILED"},
-    "AWAITING_APPROVAL": {"APPROVED", "FAILED"},
-    "APPROVED": {"UPLOADING", "FAILED"},
-    "UPLOADING": {"UPLOADED", "FAILED"},
-    "UPLOADED": {"QUEUED", "FAILED"},
-    "QUEUED": {"PUBLISHING", "FAILED"},
-    "PUBLISHING": {"PUBLISHED", "ACTION_REQUIRED", "FAILED"},
-    "PUBLISHED": frozenset(),  # terminal
-    "ACTION_REQUIRED": {"PUBLISHING", "FAILED"},
-    "FAILED": {"RENDERING", "UPLOADING", "QUEUED", "PUBLISHING"},  # retomável
-}
-
+# Re-exportado de src.contracts: fonte única de verdade para estados,
+# estados terminais e transições permitidas do pipeline.
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "videos.sqlite3"
 
 
