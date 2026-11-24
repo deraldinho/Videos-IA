@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Optional
 
@@ -37,6 +37,10 @@ VIDEO_STATES: frozenset[str] = frozenset(
         "FAILED",
     }
 )
+
+# Estados terminais: um vídeo neles nunca é considerado estagnado, mesmo com
+# updated_at antigo (já atingiu um desfecho: publicado, falhou ou requer ação).
+TERMINAL_STATES: frozenset[str] = frozenset({"PUBLISHED", "FAILED", "ACTION_REQUIRED"})
 
 # Transições permitidas: origem -> conjunto de destinos possíveis.
 ALLOWED_TRANSITIONS: Mapping[str, frozenset[str]] = {
@@ -239,6 +243,34 @@ class Database:
                 (status,),
             ).fetchall()
 
+    def stalled_videos(self, max_idle_seconds: int = 3600) -> list[sqlite3.Row]:
+        """Lista vídeos estagnados: estados não-terminais parados além do limite.
+
+        Um vídeo é considerado estagnado quando seu status não é terminal
+        (``PUBLISHED``, ``FAILED``, ``ACTION_REQUIRED``) e seu ``updated_at``
+        é mais antigo que ``max_idle_seconds`` a partir de agora. Estados
+        terminais nunca são estagnados, pois já atingiram um desfecho.
+
+        Returns:
+            Lista de linhas da tabela ``videos`` com os vídeos estagnados.
+        """
+        now = _utc_now().isoformat()
+        # Corte: vídeos com updated_at anterior ao limite são estagnados.
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=max_idle_seconds)
+        ).isoformat()
+        placeholders = ",".join("?" for _ in TERMINAL_STATES)
+        with self.transaction() as conn:
+            return conn.execute(
+                f"""
+                SELECT * FROM videos
+                WHERE status NOT IN ({placeholders})
+                  AND updated_at < ?
+                ORDER BY updated_at
+                """,
+                (*TERMINAL_STATES, cutoff),
+            ).fetchall()
+
     def transition(
         self,
         video_id: str,
@@ -252,6 +284,12 @@ class Database:
 
         Idempotente: se o vídeo já estiver em ``to_status`` e não houver campos
         para atualizar, não grava histórico duplicado.
+
+        Regras de segurança:
+        - A transição para ``PUBLISHED`` exige confirmação remota verificável
+          (pelo menos um identificador remoto: ``cloudinary_id`` ou
+          ``buffer_post_id``, ou ambos informados). Upload/agendamento simulado
+          (mock) nunca é suficiente para marcar como publicado.
         """
         if to_status not in VIDEO_STATES:
             raise PipelineError(f"Estado inválido: {to_status}")
@@ -270,6 +308,15 @@ class Database:
                 if to_status not in allowed:
                     raise PipelineError(
                         f"Transição não permitida: {from_status} -> {to_status}"
+                    )
+
+            # Regra de segurança CR-01: PUBLISHED exige confirmação remota real.
+            if to_status == "PUBLISHED":
+                remoto = bool(fields.get("cloudinary_id") or fields.get("buffer_post_id"))
+                if not remoto:
+                    raise PipelineError(
+                        "Transição para PUBLISHED bloqueada: exige confirmação "
+                        "remota verificável (cloudinary_id e/ou buffer_post_id)."
                     )
 
             sets = ", ".join(f"{k} = ?" for k in fields)
@@ -444,6 +491,7 @@ class Database:
 
 __all__ = [
     "VIDEO_STATES",
+    "TERMINAL_STATES",
     "ALLOWED_TRANSITIONS",
     "Database",
     "DEFAULT_DB_PATH",

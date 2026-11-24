@@ -54,8 +54,9 @@ class HyperFramesAdapter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Diretório do vendor/hyperframes (repositório clonado do HeyGen).
+        # O vendor fica na raiz do projeto (nível acima de src/video/).
         if vendor_dir is None:
-            vendor_dir = Path(__file__).resolve().parents[1] / "vendor" / "hyperframes"
+            vendor_dir = Path(__file__).resolve().parents[2] / "vendor" / "hyperframes"
         self.vendor_dir = Path(vendor_dir).resolve()
 
         self.settings = settings

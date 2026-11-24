@@ -24,6 +24,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph, START
 from langgraph.types import Command, interrupt
 
+from src.workflow.events import emit, ACTION_STARTED, ACTION_COMPLETED, ACTION_ERROR
 from src.workflow.state import (
     ApprovalStatus,
     Stage,
@@ -36,6 +37,37 @@ from src.workflow.state import (
 
 # Limite de retentativas por estágio antes de encerrar com erro.
 MAX_RETRIES = 3
+
+
+def _instrumented(agent_name: str):
+    """Decora um nó de agente para emitir eventos de início/término/erro no barramento."""
+
+    def decorator(fn):
+        def wrapper(state, *args, **kwargs):
+            state = _ensure_state(state)
+            emit(agent_name, ACTION_STARTED, state,
+                 stage=state.get("current_stage"), status=state.get("status"))
+            try:
+                out = fn(state, *args, **kwargs)
+                out = out if isinstance(out, dict) else state
+                emit(
+                    agent_name,
+                    ACTION_COMPLETED,
+                    out,
+                    stage=out.get("current_stage"),
+                    status=out.get("status"),
+                    note=out.get("note"),
+                )
+                return out
+            except Exception as exc:  # noqa: BLE001 - propaga o erro após emitir
+                emit(agent_name, ACTION_ERROR, state,
+                     stage=state.get("current_stage"), status=state.get("status"),
+                     note=str(exc))
+                raise
+
+        return wrapper
+
+    return decorator
 
 # Nomes dos nós.
 NODE_SUPERVISOR = "supervisor"
@@ -53,6 +85,8 @@ NODE_HUMAN_APPROVAL = "human_approval"
 NODE_PUBLISHING = "publishing_agent"
 NODE_MONITORING = "monitoring_agent"
 NODE_AUDIT = "audit_agent"
+NODE_PUBLICATION_TARGETS = "publication_targets"
+NODE_ANALYTICS = "analytics"
 
 # Ordem determinística de estágios (supervisor roteia nesta sequência).
 STAGE_ORDER = [
@@ -72,6 +106,8 @@ STAGE_ORDER = [
     Stage.PUBLISHED.value,
     Stage.QUEUED.value,
     "MONITORED",
+    "TARGETS_PREPARADO",
+    "ANALYTICAS",
 ]
 
 
@@ -140,18 +176,61 @@ def supervisor(state: dict[str, Any]) -> dict[str, Any]:
         state["status"] = Stage.FAILED.value
         return state
 
-    # Publicação concluída (real PUBLISHED ou agendado/mock QUEUED):
-    # monitoramento → auditoria → fim.
+    # CP27 — Recuperação de falha: se houve erro recente (errors não vazio),
+    # há retries restantes e um agente está em execução (_step), roteia de
+    # volta para esse agente para nova tentativa, evitando loop infinito.
+    # Só se aplica quando o status ainda está em estágio de processamento
+    # (não chegou a um estado de conclusão como VALIDATED/APPROVED/PUBLISHED).
+    step = state.get("_step")
+    errors = state.get("errors") or []
+    retries = int(state.get("retries", 0))
+    status_conclusao = {
+        Stage.VALIDATED.value, Stage.APPROVED.value, Stage.UPLOADED.value,
+        Stage.QUEUED.value, Stage.PUBLISHED.value, Stage.RENDERED.value,
+        Stage.FAILED.value, Stage.ACTION_REQUIRED.value,
+    }
+    if (
+        step
+        and errors
+        and retries < MAX_RETRIES
+        and status not in status_conclusao
+    ):
+        state["retries"] = retries + 1
+        state["_next"] = step
+        return state
+
+    # Publicacao concluida (real PUBLISHED ou agendado/mock QUEUED):
+    # monitoramento -> analitica -> auditoria -> fim.
+    # Preserva QUEUED (post agendado) nao sobrescrevendo com MONITORED:
+    # MONITORED e um status de controle do supervisor, nao um estado de video.
     if status in {Stage.PUBLISHED.value, Stage.QUEUED.value}:
+        estado_publicacao = status
         state["_next"] = NODE_MONITORING
-        state["status"] = "MONITORED"
+        state["status"] = estado_publicacao
+        state["current_stage"] = estado_publicacao
         return state
     if status == "MONITORED":
+        # CP25: apos o monitoramento, coletar metricas antes da auditoria.
+        # So vai para analytics quando o monitoramento acabou de rodar
+        # (_step == monitoring_agent). analytics ja rodou (_step == analytics_agent)
+        # ou um MONITORED simples (sem origem conhecida) vai direto à auditoria,
+        # preservando o roteamento anterior (MONITORED -> audit).
+        if state.get("_step") == "monitoring_agent":
+            state["_next"] = NODE_ANALYTICS
+            return state
+        if state.get("_step") == "analytics_agent":
+            state["_next"] = NODE_AUDIT
+            return state
         state["_next"] = NODE_AUDIT
         return state
 
-    # Já aprovado (mas ainda não publicado): publicar.
+    # Ja aprovado (mas ainda nao publicou): preparar targets multicanal, depois publicar.
     if approval == ApprovalStatus.APPROVED.value and status == Stage.APPROVED.value:
+        if state.get("targets_pending"):
+            # CP24: preparar targets multicanal antes de publicar em cada um.
+            state["targets_pending"] = False
+            state["_next"] = NODE_PUBLICATION_TARGETS
+            return state
         state["_next"] = NODE_PUBLISHING
         state["status"] = Stage.UPLOADING.value
         return state
@@ -171,14 +250,27 @@ def supervisor(state: dict[str, Any]) -> dict[str, Any]:
         state["status"] = Stage.AWAITING_APPROVAL.value
         return state
 
-    # Qualidade validada: conformidade.
+    # Qualidade validada: conformidade (somente se a validação passou de fato).
     if status == Stage.VALIDATED.value:
+        vr = state.get("validation_results") or {}
+        if not vr.get("valid"):
+            # Qualidade inválida: não avança para conformidade. Sem transição
+            # aplicável -> encerra (falha não é sucesso, evita PUBLISHED sem
+            # qualidade). O supervisor não encontra transição e termina.
+            state["_next"] = "__end__"
+            return state
         state["_next"] = NODE_COMPLIANCE
         state["status"] = "COMPLIANCE_CHECKED"
         return state
 
-    # Transcrito: qualidade.
+    # Transcrito: qualidade (não reexecutar se a validação já falhou — evita loop).
     if status == "TRANSCRIBED":
+        vr = state.get("validation_results") or {}
+        if vr and not vr.get("valid"):
+            # Qualidade já falhou anteriormente: não ciclar de volta para
+            # quality_agent. Sem transição aplicável -> encerra.
+            state["_next"] = "__end__"
+            return state
         state["_next"] = NODE_QUALITY
         state["status"] = Stage.VALIDATED.value
         return state
@@ -373,7 +465,7 @@ def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
                 height=height,
                 fps=fps,
                 require_audio=True,
-                strict=False,
+                strict=True,
             )
             result = {
                 "valid": True,
@@ -389,8 +481,18 @@ def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
     else:
         result = {"valid": False, "errors": ["Nenhum MP4 para validar"]}
     state["validation_results"] = result
-    state["status"] = Stage.VALIDATED.value if result["valid"] else Stage.SCRIPT_READY.value
-    state["current_stage"] = Stage.VALIDATED.value
+    if result["valid"]:
+        state["status"] = Stage.VALIDATED.value
+        state["current_stage"] = Stage.VALIDATED.value
+    else:
+        # Qualidade falhou: NÃO deixa status como VALIDATED (mesmo que tenha
+        # sido VALIDADO em execução anterior). Uma falha de qualidade não é
+        # sucesso. Mantém o estágio atual (ex.: TRANSCRIBED) para que o
+        # supervisor não encontre transição aplicável e encerre em vez de
+        # avançar prematuramente para compliance com qualidade inválida.
+        estado_atual = state.get("current_stage", "TRANSCRIBED")
+        state["status"] = estado_atual
+        state["current_stage"] = estado_atual
     state["_next"] = NODE_SUPERVISOR
     state["_step"] = "quality_agent"
     return state
@@ -424,6 +526,8 @@ def human_approval(state: dict[str, Any]) -> dict[str, Any]:
     if state["approval_status"] == "approved":
         state["status"] = Stage.APPROVED.value
         state["current_stage"] = Stage.APPROVED.value
+        # CP24: apos a aprovacao, preparar os targets multicanal antes de publicar.
+        state["targets_pending"] = True
     else:
         state["status"] = Stage.ACTION_REQUIRED.value
         state["current_stage"] = Stage.ACTION_REQUIRED.value
@@ -452,6 +556,70 @@ def monitoring_agent(state: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def publication_targets_agent(state: dict[str, Any]) -> dict[str, Any]:
+    """Prepara PublicationTargets para todos os canais de publicacao (CP24).
+
+    Usa PublicationManager para preparar targets por plataforma
+    (tiktok, youtube_shorts, instagram_reels) com isolamento de falha
+    e idempotencia. Apos preparar, volta ao supervisor, que roteia para
+    o publishing_agent (publicar em cada target).
+    """
+    from src.workflow.publication import (
+        InstagramReelsAdapter,
+        PublicationManager,
+        TikTokAdapter,
+        YouTubeShortsAdapter,
+    )
+
+    state = _ensure_state(state)
+    video_id = state["video_id"]
+    platforms = ["tiktok", "youtube_shorts", "instagram_reels"]
+
+    manager = PublicationManager(
+        [
+            TikTokAdapter(live=False),
+            YouTubeShortsAdapter(live=False),
+            InstagramReelsAdapter(live=False),
+        ]
+    )
+    targets = manager.prepare_targets(
+        state, video_id=video_id, platforms=platforms
+    )
+
+    # Garante que os targets estejam persistidos no estado (prepare_targets ja o faz)
+    # e marca o fluxo como pronto para publicacao em cada target.
+    state["publication_targets"] = [
+        t.model_dump(mode="json") for t in targets
+    ]
+    state["status"] = Stage.APPROVED.value
+    state["current_stage"] = Stage.APPROVED.value
+    state["targets_pending"] = False
+    state["_next"] = NODE_SUPERVISOR
+    state["_step"] = "publication_targets_agent"
+    return state
+
+
+def analytics_agent(state: dict[str, Any]) -> dict[str, Any]:
+    """Coleta metricas de todos os targets publicados (CP25).
+
+    Usa AnalyticsManager (MockAnalyticsProvider) para coletar metricas
+    dos targets publicados/agendados e consolidar no estado
+    (state['metric_snapshots']). Apos coletar, volta ao supervisor, que
+    roteia para o audit_agent.
+    """
+    from src.workflow.analytics import AnalyticsManager, MockAnalyticsProvider
+
+    state = _ensure_state(state)
+    manager = AnalyticsManager([MockAnalyticsProvider()])
+    state = manager.consolidate(state)
+
+    state["status"] = "MONITORED"
+    state["current_stage"] = "MONITORED"
+    state["_next"] = NODE_SUPERVISOR
+    state["_step"] = "analytics_agent"
+    return state
+
+
 def audit_agent(state: dict[str, Any]) -> dict[str, Any]:
     """Grava uma entrada de auditoria final no estado."""
     state = _ensure_state(state)
@@ -476,6 +644,32 @@ def audit_agent(state: dict[str, Any]) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
+# Instrumentação de visibilidade em tempo real (CP29).
+#
+# Cada nó de agente é decorado para emitir eventos started/completed/error no
+# barramento de eventos (src.workflow.events), consumidos pelo servidor web e
+# pela UI /agents. O comportamento dos nós é preservado (o estado retornado é
+# o mesmo); apenas são emitidos efeitos colaterais de observabilidade.
+# --------------------------------------------------------------------------- #
+research_agent = _instrumented(NODE_RESEARCH)(research_agent)
+idea_agent = _instrumented(NODE_IDEA)(idea_agent)
+factcheck_agent = _instrumented(NODE_FACTCHECK)(factcheck_agent)
+script_agent = _instrumented(NODE_SCRIPT)(script_agent)
+voice_agent = _instrumented(NODE_VOICE)(voice_agent)
+visual_agent = _instrumented(NODE_VISUAL)(visual_agent)
+render_agent = _instrumented(NODE_RENDER)(render_agent)
+transcription_agent = _instrumented(NODE_TRANSCRIPTION)(transcription_agent)
+quality_agent = _instrumented(NODE_QUALITY)(quality_agent)
+compliance_agent = _instrumented(NODE_COMPLIANCE)(compliance_agent)
+human_approval = _instrumented(NODE_HUMAN_APPROVAL)(human_approval)
+publishing_agent = _instrumented(NODE_PUBLISHING)(publishing_agent)
+monitoring_agent = _instrumented(NODE_MONITORING)(monitoring_agent)
+publication_targets_agent = _instrumented(NODE_PUBLICATION_TARGETS)(publication_targets_agent)
+analytics_agent = _instrumented(NODE_ANALYTICS)(analytics_agent)
+audit_agent = _instrumented(NODE_AUDIT)(audit_agent)
+
+
+# --------------------------------------------------------------------------- #
 # Roteamento condicional                                                      #
 # --------------------------------------------------------------------------- #
 def _route(state: dict[str, Any]) -> str:
@@ -483,8 +677,8 @@ def _route(state: dict[str, Any]) -> str:
     valid_nodes = {
         NODE_RESEARCH, NODE_IDEA, NODE_FACTCHECK, NODE_SCRIPT, NODE_VOICE,
         NODE_VISUAL, NODE_RENDER, NODE_TRANSCRIPTION, NODE_QUALITY,
-        NODE_COMPLIANCE, NODE_HUMAN_APPROVAL, NODE_PUBLISHING, NODE_MONITORING,
-        NODE_AUDIT,
+        NODE_COMPLIANCE, NODE_HUMAN_APPROVAL, NODE_PUBLICATION_TARGETS,
+        NODE_PUBLISHING, NODE_MONITORING, NODE_ANALYTICS, NODE_AUDIT,
     }
     if nxt in valid_nodes:
         return nxt
@@ -512,6 +706,8 @@ def build_graph(checkpointer: SqliteSaver | None = None):
     builder.add_node(NODE_PUBLISHING, publishing_agent)
     builder.add_node(NODE_MONITORING, monitoring_agent)
     builder.add_node(NODE_AUDIT, audit_agent)
+    builder.add_node(NODE_PUBLICATION_TARGETS, publication_targets_agent)
+    builder.add_node(NODE_ANALYTICS, analytics_agent)
 
     builder.add_edge(START, NODE_SUPERVISOR)
     builder.add_conditional_edges(
@@ -529,8 +725,10 @@ def build_graph(checkpointer: SqliteSaver | None = None):
             NODE_QUALITY: NODE_QUALITY,
             NODE_COMPLIANCE: NODE_COMPLIANCE,
             NODE_HUMAN_APPROVAL: NODE_HUMAN_APPROVAL,
+            NODE_PUBLICATION_TARGETS: NODE_PUBLICATION_TARGETS,
             NODE_PUBLISHING: NODE_PUBLISHING,
             NODE_MONITORING: NODE_MONITORING,
+            NODE_ANALYTICS: NODE_ANALYTICS,
             NODE_AUDIT: NODE_AUDIT,
             "__end__": END,
         },
@@ -547,6 +745,8 @@ def build_graph(checkpointer: SqliteSaver | None = None):
     builder.add_edge(NODE_COMPLIANCE, NODE_SUPERVISOR)
     builder.add_edge(NODE_PUBLISHING, NODE_SUPERVISOR)
     builder.add_edge(NODE_MONITORING, NODE_SUPERVISOR)
+    builder.add_edge(NODE_PUBLICATION_TARGETS, NODE_SUPERVISOR)
+    builder.add_edge(NODE_ANALYTICS, NODE_SUPERVISOR)
     builder.add_edge(NODE_AUDIT, END)
     builder.add_edge(NODE_HUMAN_APPROVAL, NODE_SUPERVISOR)
 
@@ -582,5 +782,7 @@ __all__ = [
     "NODE_PUBLISHING",
     "NODE_MONITORING",
     "NODE_AUDIT",
+    "NODE_PUBLICATION_TARGETS",
+    "NODE_ANALYTICS",
     "STAGE_ORDER",
 ]

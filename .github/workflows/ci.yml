@@ -1,0 +1,69 @@
+name: CI - TikTok AI Autopilot
+
+on:
+  push:
+    branches: [ main, master, feat/*, fix/* ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependências Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Validar sintaxe e importação dos módulos
+        run: |
+          python -m py_compile src/**/*.py main.py
+          python -c "import src; print('src version:', src.__version__)"
+
+      - name: Executar suíte pytest isolada (sem APIs externas)
+        run: |
+          python -m pytest tests/ -q -p no:cacheprovider
+
+      - name: Análise estática (compileall + import check)
+        run: |
+          python -m compileall -q src tests
+          python -c "import src.database, src.graph_orchestrator, src.publication_policy, src.video.hyperframes_adapter"
+
+      - name: Relatório de cobertura (resumo)
+        run: |
+          python -m pytest tests/ -q --cov=src --cov-report=term-missing -p no:cacheprovider || true
+
+  check-sem-segredos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Varredura de segredos (detect-secrets)
+        run: |
+          pip install detect-secrets || true
+          detect-secrets scan --baseline .secrets.baseline || true
+          # Não falhar a CI apenas por varredura; registra resultado para revisão.
+          cat .secrets.baseline 2>/dev/null || echo "Nenhum baseline gerado."
+
+      - name: Verificar ausência de arquivos proibidos
+        run: |
+          # .env, cookies, tokens, sessões não devem ser rastreados
+          if git ls-files | grep -Ei '\.env$|credentials|secret\.json|tokens?|session' ; then
+            echo "::error::Arquivo potencialmente sensível rastreado no Git."
+            exit 1
+          fi
+          echo "Nenhum arquivo de credenciais rastreado."
