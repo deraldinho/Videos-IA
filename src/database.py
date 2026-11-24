@@ -177,7 +177,45 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_videos_execution ON videos(execution_id);
                 CREATE INDEX IF NOT EXISTS idx_history_video ON video_history(video_id);
                 CREATE INDEX IF NOT EXISTS idx_scheduled_video ON scheduled_posts(video_id);
+                -- Tabela de controle de migrações de esquema (aditivas, migráveis,
+                -- retrocompatíveis). Cada migração aplicada é registrada aqui com
+                -- sua versão e um hash do SQL executado, permitindo auditoria e
+                -- idempotência (migração já aplicada não é executada novamente).
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version       INTEGER PRIMARY KEY,
+                    name          TEXT NOT NULL,
+                    sql_hash      TEXT NOT NULL,
+                    applied_at    TEXT NOT NULL
+                );
                 """
+            )
+
+    def apply_migration(self, version: int, name: str, sql: str) -> None:
+        """Aplica uma migração de esquema aditiva se ainda não foi aplicada.
+
+        A migração é executada dentro de uma transação: se o SQL falhar, a
+        transação é desfeita e nenhuma versão é registrada. Migrações já
+        aplicadas (mesma ``version``) são ignoradas, garantindo idempotência.
+
+        Argumentos:
+            version: número inteiro crescente da migração.
+            name: nome descritivo da migração (para auditoria).
+            sql: SQL DDL/DML a executar (deve ser aditivo e retrocompatível).
+        """
+        import hashlib
+
+        sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+        with self.transaction() as conn:
+            already = conn.execute(
+                "SELECT 1 FROM schema_migrations WHERE version = ?", (version,)
+            ).fetchone()
+            if already is not None:
+                return  # idempotente: migração já aplicada
+            conn.executescript(sql)
+            conn.execute(
+                "INSERT INTO schema_migrations (version, name, sql_hash, applied_at) "
+                "VALUES (?, ?, ?, ?)",
+                (version, name, sql_hash, _utc_now().isoformat()),
             )
 
     # ------------------------------------------------------------------ vídeo
@@ -495,4 +533,5 @@ __all__ = [
     "ALLOWED_TRANSITIONS",
     "Database",
     "DEFAULT_DB_PATH",
+    "apply_migration",
 ]
