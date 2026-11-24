@@ -24,6 +24,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph, START
 from langgraph.types import Command, interrupt
 
+from src.workflow.events import emit, ACTION_STARTED, ACTION_COMPLETED, ACTION_ERROR
 from src.workflow.state import (
     ApprovalStatus,
     Stage,
@@ -36,6 +37,37 @@ from src.workflow.state import (
 
 # Limite de retentativas por estágio antes de encerrar com erro.
 MAX_RETRIES = 3
+
+
+def _instrumented(agent_name: str):
+    """Decora um nó de agente para emitir eventos de início/término/erro no barramento."""
+
+    def decorator(fn):
+        def wrapper(state, *args, **kwargs):
+            state = _ensure_state(state)
+            emit(agent_name, ACTION_STARTED, state,
+                 stage=state.get("current_stage"), status=state.get("status"))
+            try:
+                out = fn(state, *args, **kwargs)
+                out = out if isinstance(out, dict) else state
+                emit(
+                    agent_name,
+                    ACTION_COMPLETED,
+                    out,
+                    stage=out.get("current_stage"),
+                    status=out.get("status"),
+                    note=out.get("note"),
+                )
+                return out
+            except Exception as exc:  # noqa: BLE001 - propaga o erro após emitir
+                emit(agent_name, ACTION_ERROR, state,
+                     stage=state.get("current_stage"), status=state.get("status"),
+                     note=str(exc))
+                raise
+
+        return wrapper
+
+    return decorator
 
 # Nomes dos nós.
 NODE_SUPERVISOR = "supervisor"
@@ -582,6 +614,32 @@ def audit_agent(state: dict[str, Any]) -> dict[str, Any]:
     state["updated_at"] = _utc_now_iso()
     state["_next"] = "__end__"
     return state
+
+
+# --------------------------------------------------------------------------- #
+# Instrumentação de visibilidade em tempo real (CP29).
+#
+# Cada nó de agente é decorado para emitir eventos started/completed/error no
+# barramento de eventos (src.workflow.events), consumidos pelo servidor web e
+# pela UI /agents. O comportamento dos nós é preservado (o estado retornado é
+# o mesmo); apenas são emitidos efeitos colaterais de observabilidade.
+# --------------------------------------------------------------------------- #
+research_agent = _instrumented(NODE_RESEARCH)(research_agent)
+idea_agent = _instrumented(NODE_IDEA)(idea_agent)
+factcheck_agent = _instrumented(NODE_FACTCHECK)(factcheck_agent)
+script_agent = _instrumented(NODE_SCRIPT)(script_agent)
+voice_agent = _instrumented(NODE_VOICE)(voice_agent)
+visual_agent = _instrumented(NODE_VISUAL)(visual_agent)
+render_agent = _instrumented(NODE_RENDER)(render_agent)
+transcription_agent = _instrumented(NODE_TRANSCRIPTION)(transcription_agent)
+quality_agent = _instrumented(NODE_QUALITY)(quality_agent)
+compliance_agent = _instrumented(NODE_COMPLIANCE)(compliance_agent)
+human_approval = _instrumented(NODE_HUMAN_APPROVAL)(human_approval)
+publishing_agent = _instrumented(NODE_PUBLISHING)(publishing_agent)
+monitoring_agent = _instrumented(NODE_MONITORING)(monitoring_agent)
+publication_targets_agent = _instrumented(NODE_PUBLICATION_TARGETS)(publication_targets_agent)
+analytics_agent = _instrumented(NODE_ANALYTICS)(analytics_agent)
+audit_agent = _instrumented(NODE_AUDIT)(audit_agent)
 
 
 # --------------------------------------------------------------------------- #

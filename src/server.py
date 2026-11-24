@@ -31,7 +31,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
@@ -40,6 +40,7 @@ from src.errors import PipelineError
 from src.health import run_health_checks
 from src.metrics import metrics
 from src.orchestrator import Orchestrator, STAGE_ORDER
+from src.workflow.events import AgentEvent, event_bus
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +205,20 @@ def get_metrics() -> dict[str, Any]:
     }
 
 
+@app.get("/api/agent-events", dependencies=[Depends(verify_api_key)])
+def list_agent_events(
+    since_seq: int = Query(default=0, ge=0, description="Retorna apenas eventos com seq > since_seq"),
+    limit: int = Query(default=200, ge=1, le=1000, description="Limite de eventos retornados"),
+) -> dict[str, Any]:
+    """Lista eventos recentes de agentes (visibilidade em tempo real do pipeline)."""
+    events = event_bus.snapshot(since_seq=since_seq, limit=limit)
+    return {
+        "events": [e.model_dump_safe() for e in events],
+        "count": len(events),
+        "last_seq": event_bus.last_seq(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # WebSocket — atualizações em tempo real
 # ---------------------------------------------------------------------------
@@ -272,8 +287,190 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Root
+# WebSocket — eventos de agentes em tempo real (CP29)
 # ---------------------------------------------------------------------------
+@app.websocket("/api/agent-events/ws")
+async def agent_events_ws(websocket: WebSocket) -> None:
+    """WebSocket que push eventos de agentes em tempo real para clientes conectados.
+
+    Segue o mesmo modelo de autenticação opcional de /api/ws (?token=UI_API_KEY).
+    Envia o snapshot dos eventos recentes ao conectar e, em seguida, push de cada
+    novo evento à medida que é emitido pelo grafo.
+    """
+    if UI_API_KEY:
+        token = websocket.query_params.get("token")
+        if token != UI_API_KEY:
+            await websocket.close(code=4001, reason="API key inválida")
+            return
+    # Vincula o loop de asyncio do servidor ao barramento (na primeira conexão).
+    if event_bus._queue is None:
+        event_bus.bind_loop(asyncio.get_running_loop())
+    await websocket.accept()
+    try:
+        # Snapshot dos eventos recentes.
+        for ev in event_bus.snapshot(limit=200):
+            try:
+                await websocket.send_text(ev.model_dump_json())
+            except Exception:
+                return
+        # Push de novos eventos em tempo real.
+        while True:
+            try:
+                ev = await event_bus.next_event()
+                await websocket.send_text(ev.model_dump_json())
+            except WebSocketDisconnect:
+                break
+            except Exception:
+                break
+    finally:
+        # next_event bloqueia; desconexão encerra o loop acima.
+        pass
+
+
+# ---------------------------------------------------------------------------
+# UI — visibilidade em tempo real dos agentes (/agents)
+# ---------------------------------------------------------------------------
+@app.get("/agents")
+def agents_ui() -> str:
+    """Página que exibe, em tempo real, o que cada agente está fazendo e dizendo."""
+    return Response(content="""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok AI Autopilot — Agentes em Tempo Real</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0c10; color: #e8e8f0; }
+  .card { background: #12141d; border: 1px solid #2a2a3a; border-radius: 8px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .row-started { border-left: 3px solid #3b82f6; }
+  .row-completed { border-left: 3px solid #22c55e; }
+  .row-error { border-left: 3px solid #ef4444; }
+  .row-note { border-left: 3px solid #a855f7; }
+  .row-transition { border-left: 3px solid #f59e0b; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .bg-started { background: #1e3a8a; color: #93c5fd; }
+  .bg-completed { background: #14532d; color: #bbf7d0; }
+  .bg-error { background: #7f1d1d; color: #fecaca; }
+  .bg-note { background: #5b21b6; color: #e9d5ff; }
+  .bg-transition { background: #713f12; color: #fcd34d; }
+  #log { scroll-behavior: smooth; }
+  .pulse::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 1.5s infinite; margin-right: 6px; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+</style>
+</head>
+<body class="min-h-screen p-4">
+<nav class="border-b border-[#2a2a3a] bg-[#0b0c10] shadow-sm mb-6">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded bg-[#12141d] flex items-center justify-center">
+        <svg class="w-5 h-5 text-[#e8e8f0]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h1m5-3h1m-5-3h1M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold">TikTok AI Autopilot</h1>
+        <p class="text-xs text-[#6b7280]">Agentes em tempo real — o que cada agente está fazendo e dizendo</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-[#6b7280]">Eventos:</span>
+        <span id="count" class="mono text-[#3b82f6]">0</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-[#6b7280]">Último seq:</span>
+        <span id="lastSeq" class="mono text-[#3b82f6]">-</span>
+      </div>
+      <a href="/" class="text-xs text-[#3b82f6] hover:underline">Voltar à API</a>
+    </div>
+  </div>
+</nav>
+
+<main class="max-w-7xl mx-auto">
+  <div class="card p-4 mb-4">
+    <h2 class="font-semibold mb-2">Log de agentes (tempo real)</h2>
+    <p class="text-xs text-[#6b7280] mb-3">Conectado via WebSocket a <code class="mono text-[#3b82f6]">/api/agent-events/ws</code>. Cada linha é um evento emitido por um agente do grafo LangGraph.</p>
+    <div id="log" class="max-h-[70vh] overflow-y-auto border border-[#2a2a3a] rounded p-3 bg-[#0b0c10] space-y-2"></div>
+    <div class="mt-3 text-xs text-[#6b7280]">Sem eventos ainda. Execute o pipeline (ex.: <code class="mono">python main.py generate</code> ou via API) para ver os agentes em ação.</div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var log = document.getElementById('log');
+  var countEl = document.getElementById('count');
+  var lastSeqEl = document.getElementById('lastSeq');
+  var count = 0;
+  var lastSeq = 0;
+  var wsUrl = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
+              '//' + window.location.host + '/api/agent-events/ws';
+  var token = new URLSearchParams(window.location.search).get('token');
+  if (token) { wsUrl += '?token=' + encodeURIComponent(token); }
+
+  var ws = new WebSocket(wsUrl);
+  var status = document.createElement('div');
+  status.className = 'text-xs text-[#6b7280] mb-2';
+  log.parentNode.insertBefore(status, log);
+
+  function htmlEscape(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function rowClass(action) {
+    var map = { started: 'row-started bg-started', completed: 'row-completed bg-completed',
+                error: 'row-error bg-error', note: 'row-note bg-note', transition: 'row-transition bg-transition' };
+    return map[action] || 'row-started';
+  }
+  function append(ev) {
+    count++;
+    lastSeq = ev.seq;
+    countEl.textContent = count;
+    lastSeqEl.textContent = lastSeq;
+    var cls = rowClass(ev.action);
+    var fieldsHtml = '';
+    if (ev.fields && Object.keys(ev.fields).length) {
+      fieldsHtml = ' <span class="text-[#6b7280] text-xs mono">[' +
+        Object.entries(ev.fields).map(function (kv) { return kv[0] + '=' + htmlEscape(String(kv[1])); }).join(', ') +
+        ']</span>';
+    }
+    var noteHtml = ev.note ? ' — <span class="text-[#cbd5e1]">' + htmlEscape(ev.note) + '</span>' : '';
+    var div = document.createElement('div');
+    div.className = 'p-2 mono text-xs border border-[#1f2330] rounded ' + cls;
+    div.innerHTML =
+      '<span class="text-[#94a3b8]">' + htmlEscape(ev.ts) + '</span> ' +
+      '<span class="text-[#e8e8f0] font-semibold">' + htmlEscape(ev.agent) + '</span> ' +
+      '<span class="badge ' + cls.replace('row-', 'bg-') + '">' + htmlEscape(ev.action) + '</span>' +
+      '<span class="text-[#6b7280] ml-2">stage=' + htmlEscape(ev.stage || '-') +
+      ' status=' + htmlEscape(ev.status || '-') + '</span>' +
+      fieldsHtml + noteHtml +
+      (ev.video_id ? ' <span class="text-[#6b7280] ml-2">vid=' + htmlEscape(ev.video_id) + '</span>' : '');
+    log.prepend(div);
+    var container = log.parentElement;
+    container.scrollTop = 0;
+  }
+
+  ws.onopen = function () { status.textContent = 'Conectado ao fluxo de eventos em tempo real.'; status.className = 'text-xs text-[#22c55e] mb-2 pulse'; };
+  ws.onclose = function () { status.textContent = 'Desconectado do fluxo de eventos.'; status.className = 'text-xs text-[#ef4444] mb-2'; };
+  ws.onerror = function () { status.textContent = 'Erro na conexão de eventos.'; status.className = 'text-xs text-[#ef4444] mb-2'; };
+  ws.onmessage = function (evt) {
+    try { append(JSON.parse(evt.data)); } catch (e) { console.error(e); }
+  };
+
+  // Carrega histórico inicial via REST.
+  fetch('/api/agent-events?limit=50')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      (data.events || []).slice().reverse().forEach(append);
+      countEl.textContent = data.count || 0;
+      lastSeqEl.textContent = data.last_seq || '-';
+    })
+    .catch(function () {});
+})();
+</script>
+</body>
+</html>""", media_type="text/html")
+
 @app.get("/", dependencies=[Depends(verify_api_key)])
 def root() -> dict[str, Any]:
     """Informações da API e links úteis."""
