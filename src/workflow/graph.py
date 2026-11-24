@@ -483,28 +483,32 @@ def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
             }
         except Exception as exc:  # noqa: BLE001 - validação falhou, registra e segue
             result = {"valid": False, "errors": [str(exc)]}
-            # --- Alinhamento com MAX_RETRIES do supervisor (P2 loop agêntico) ---
+            # Registra o erro para auditoria, mas NÃO incrementa retries:
+            # o supervisor não encontra transição aplicável para qualidade
+            # inválida e encerra (falha não é sucesso, evita PUBLISHED sem
+            # qualidade e evita loop infinito CP27 de volta para quality_agent).
             errors = list(state.get("errors") or [])
             errors.append(f"qualidade: {exc}")
             state["errors"] = errors
-            state["retries"] = int(state.get("retries", 0)) + 1
     else:
         result = {"valid": False, "errors": ["Nenhum MP4 para validar"]}
     state["validation_results"] = result
     if result["valid"]:
         state["status"] = Stage.VALIDATED.value
         state["current_stage"] = Stage.VALIDATED.value
+        state["_step"] = "quality_agent"
     else:
         # Qualidade falhou: NÃO deixa status como VALIDATED (mesmo que tenha
         # sido VALIDADO em execução anterior). Uma falha de qualidade não é
         # sucesso. Mantém o estágio atual (ex.: TRANSCRIBED) para que o
         # supervisor não encontre transição aplicável e encerre em vez de
         # avançar prematuramente para compliance com qualidade inválida.
+        # Não define _step: sem isso o CP27 não roteia de volta para
+        # quality_agent em loop (falha definitiva, não transitória).
         estado_atual = state.get("current_stage", "TRANSCRIBED")
         state["status"] = estado_atual
         state["current_stage"] = estado_atual
     state["_next"] = NODE_SUPERVISOR
-    state["_step"] = "quality_agent"
     return state
 
 

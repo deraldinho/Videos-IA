@@ -36,6 +36,16 @@ class PublishingAgent(BaseAgent):
             return self._add_error(state, "publish",
                                    "Publicação bloqueada pelo agente de conformidade")
 
+        # Verificar MP4 antes da política de autorização, para que a falta do
+        # vídeo seja reportada claramente (independentemente do modo).
+        mp4_path = None
+        if video_assets:
+            mp4_path = video_assets[-1].get("mp4_path")
+
+        if not mp4_path or not Path(mp4_path).exists():
+            return self._add_error(state, "publish",
+                                   f"MP4 não encontrado para upload: {mp4_path}")
+
         # --- Ponto único de verdade: can_publish antes do upload (CR-05) ----
         decision = can_publish(
             state={
@@ -45,22 +55,30 @@ class PublishingAgent(BaseAgent):
                 "approval_status": state.get("approval_status", "pending"),
             }
         )
-        if not decision.authorized:
-            return self._add_error(
-                state, "publish",
-                f"Publicação não autorizada pela política central: {decision.reason}",
-            )
-
-        mp4_path = None
-        if video_assets:
-            mp4_path = video_assets[-1].get("mp4_path")
-
-        if not mp4_path or not Path(mp4_path).exists():
-            return self._add_error(state, "publish",
-                                   f"MP4 não encontrado para upload: {mp4_path}")
 
         live = bool(state.get("live_enabled", False))
-        mock = not live
+
+        # Quando não autorizado para publicação real (modo REVIEW/DRY_RUN,
+        # sem aprovação humana, AUTO sem live/auto), fazer MOCK (simulação)
+        # sem upload real. Isso preserva o gate fail-closed (nenhum upload
+        # ocorre) mas permite o fluxo continuar em modo de simulação.
+        if not decision.authorized:
+            mock_url = f"mock://cloudinary/{video_id}"
+            mock_id = f"mock-{video_id}"
+            mock_buffer_id = f"mock-buffer-{video_id}"
+            state["cloudinary_url"] = mock_url
+            state["cloudinary_id"] = mock_id
+            state["publication_status"] = "mock"
+            state["status"] = "QUEUED"
+            state["current_stage"] = "QUEUED"
+            state["buffer_post_id"] = mock_buffer_id
+            state["buffer_post_state"] = "mock"
+            state["_next"] = "supervisor"
+            state["_step"] = "publishing_agent"
+            self._add_cost(state, self.name, "publicacao", tokens=0, cost_usd=0.0)
+            return self._mark(state, self.name, "publish",
+                              f"Publicação simulada (mock): {decision.reason}",
+                              video_id=video_id, mock=True, reason=decision.reason)
 
         # --- Upload Cloudinary (real apenas em modo live) -------------------
         try:
@@ -114,6 +132,6 @@ class PublishingAgent(BaseAgent):
         self._add_cost(state, self.name, "publicacao", tokens=0, cost_usd=0.0)
         return self._mark(state, self.name, "publish",
                           f"Processado: Cloudinary={cloudinary_id}, Buffer={buffer_post_id} "
-                          f"(mock={mock})",
+                          f"(mock={not live})",
                           video_id=video_id, cloudinary_url=cloudinary_url,
-                          buffer_post_id=buffer_post_id, mock=mock)
+                          buffer_post_id=buffer_post_id, mock=not live)

@@ -13,9 +13,13 @@ class ComplianceAgent(BaseAgent):
     """Aplica regras de conformidade antes da publicação.
 
     Responsabilidades (CP09):
-    - Delegar a decisão de autorização para ``can_publish`` (ponto único de
-      verdade, CR-05), evitando regras duplicadas entre agentes.
-    - Impede publicação real em REVIEW/DRY_RUN sem aprovação explícita.
+    - Verifica coerência do modo (DRY_RUN/REVIEW/AUTO) com live_enabled/auto_enabled
+      e registra a decisão de ``can_publish`` como informativo (ponto único de
+      verdade, CR-05). Não bloqueia por falta de aprovação aqui: a aprovação
+      humana ocorre no nó human_approval (após este agente), e o gate de
+      publicação real (fail-closed) é aplicado em PublishingAgent antes do
+      upload — evitando dependência circular conformidade <-> aprovação.
+    - Impede avanço quando o roteiro foi rejeitado (approval == REJECTED).
     - Avança current_stage para COMPLIANCE_CHECKED.
     - Nunca altera credenciais nem faz upload real sem autorização.
     """
@@ -28,24 +32,39 @@ class ComplianceAgent(BaseAgent):
         mode = str(state.get("mode", "REVIEW")).upper()
         live_enabled = bool(state.get("live_enabled", False))
         auto_enabled = bool(state.get("auto_enabled", False))
+        approval = state.get("approval_status", ApprovalStatus.PENDING.value)
 
         # --- Ponto único de verdade: can_publish (CR-05) ---------------------
+        # Chamado aqui apenas para registrar o estado de autorização no
+        # compliance (informativo/auditoria). O gate efetivo (fail-closed)
+        # é aplicado em PublishingAgent antes do upload real.
         decision = can_publish(
             state={
                 "mode": mode,
                 "live_enabled": live_enabled,
                 "auto_enabled": auto_enabled,
-                "approval_status": state.get("approval_status", ApprovalStatus.PENDING.value),
+                "approval_status": approval,
             }
         )
 
         checks = list(decision.checks)
-        blocked = not decision.authorized
+        blocked = False
 
-        # Regra 3 complementar: sem aprovação, não avança além de AWAITING_APPROVAL.
-        approval = state.get("approval_status", ApprovalStatus.PENDING.value)
+        # Regra: roteiro rejeitado requer correção antes de publicar.
         if approval == ApprovalStatus.REJECTED.value:
             checks.append("Roteiro rejeitado: requer correção antes de publicar")
+            blocked = True
+
+        # Regra: modo AUTO requer auto_enabled=True E live_enabled=True para
+        # publicacao real. Quando o unico impedimento e a falta de aprovacao
+        # humana, nao bloqueia aqui: a aprovacao ocorre no no human_approval
+        # (apos este agente), evitando a dependencia circular
+        # conformidade <-> aprovacao (CR-05). O gate efetivo (fail-closed) e
+        # aplicado no PublishingAgent antes do upload real.
+        if mode == "AUTO" and (not auto_enabled or not live_enabled):
+            checks.append(
+                "Publicacao real bloqueada em modo AUTO sem auto_enabled e/ou live_enabled"
+            )
             blocked = True
 
         state["compliance"] = {
