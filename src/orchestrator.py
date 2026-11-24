@@ -117,13 +117,15 @@ class Orchestrator:
         )
         self.catalog = self._load_catalog()
 
-        # Cliente Piper TTS: usa o modelo do config.yaml quando disponível;
-        # em REVIEW/DRY_RUN gera silêncio fallback para não bloquear o pipeline.
+        # Cliente Piper TTS: usa o modelo do config.yaml quando disponível.
+        # require_real=True apenas em modo live: em REVIEW/DRY_RUN o silêncio
+        # fallback não bloqueia o pipeline e o quality gate (strict) ainda
+        # rejeita áudio silencioso antes de qualquer aprovação/publicação.
         self.tts = PiperTTS(
             piper_bin="piper",
             model_path=self.settings.video.piper_model,
             output_dir=Path("output/drafts") / "tts",
-            require_real=False,
+            require_real=self.settings.live_enabled,
         )
 
     # ------------------------------------------------------------------ #
@@ -482,6 +484,61 @@ class Orchestrator:
         # A etapa apenas registra; o estado não muda sem aprovação humana.
         return ExecutionResult(video_id, current, "approve", current, False,
                                "aguardando aprovação humana (modo REVIEW/DRY_RUN)")
+
+    def reject(
+        self,
+        video_id: str,
+        *,
+        actor: str = "operador",
+        motivo: Optional[str] = None,
+    ) -> ExecutionResult:
+        """Rejeita um vídeo em AWAITING_APPROVAL, transicionando para ACTION_REQUIRED."""
+        row = self.db.get_video(video_id)
+        if row is None:
+            raise PipelineError(f"Vídeo não encontrado: {video_id}")
+        if row["status"] != "AWAITING_APPROVAL":
+            raise PipelineError(
+                f"Rejeição requer AWAITING_APPROVAL (atual: {row['status']})"
+            )
+        note = motivo or "rejeitado via CLI"
+        self.sm.fail(video_id, note, actor=actor, to_status="ACTION_REQUIRED")
+        return ExecutionResult(
+            video_id=video_id,
+            current=row["status"],
+            stage="reject",
+            status="ACTION_REQUIRED",
+            changed=True,
+            note=note,
+        )
+
+    def approve(
+        self,
+        video_id: str,
+        *,
+        actor: str = "operador",
+    ) -> ExecutionResult:
+        """Aprova um vídeo em AWAITING_APPROVAL, transicionando para APPROVED."""
+        row = self.db.get_video(video_id)
+        if row is None:
+            raise PipelineError(f"Vídeo não encontrado: {video_id}")
+        if row["status"] != "AWAITING_APPROVAL":
+            raise PipelineError(
+                f"Aprovação requer AWAITING_APPROVAL (atual: {row['status']})"
+            )
+        if self.settings.mode == "AUTO" and not self.settings.auto_enabled:
+            raise PipelineError("Modo AUTO requer auto_enabled: true.")
+        self.sm.advance(
+            video_id, "APPROVED", actor=actor,
+            note="aprovado para publicação",
+        )
+        return ExecutionResult(
+            video_id=video_id,
+            current=row["status"],
+            stage="approve",
+            status="APPROVED",
+            changed=True,
+            note="aprovado",
+        )
 
     def _stage_upload(self, video_id: str, current: str, actor: str) -> ExecutionResult:
         if current in {"UPLOADED", "QUEUED", "PUBLISHING", "PUBLISHED"}:

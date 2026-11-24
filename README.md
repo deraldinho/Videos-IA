@@ -47,6 +47,27 @@ Copy-Item .env.example .env
 
 > ⚠️ Nunca coloque credenciais reais no `config.yaml` nem no código. Use apenas o `.env` (já no `.gitignore`).
 
+## Gerar um vídeo local com ArtCraft
+
+Na raiz do projeto, com as dependências Python, FFmpeg/FFprobe no `PATH`, Piper com o modelo pt-BR (arquivos `.onnx` e `.onnx.json`), e as CLIs do **EffectCraft** e do **FilmCraft** instaladas:
+
+```powershell
+python main.py produzir-local examples/farol-das-nuvens.json
+```
+
+O comando aceita um roteiro no mesmo formato do pipeline. Ele mede o WAV de cada frase, estende a cena quando a voz precisa de mais tempo e mantém o gancho em até 3 s. Divida frases muito longas para que cada legenda caiba em duas linhas. O layout vertical desta versão é fixo; não usa os templates HTML da fila.
+
+- **EffectCraft** cria e renderiza a composição. **FilmCraft** posiciona a narração e exporta as legendas gravadas na imagem e um SRT separado.
+- Cada execução usa uma pasta nova em `output/artcraft-local/`. Nela ficam a composição `.ecproj`, a montagem `.fcproj`, as mídias e `legendas.pt-BR.srt`. A montagem referencia as mídias da pasta; preserve-as para editar depois.
+- `video.mp4` só é entregue após os gates locais: 1080×1920, 30 fps, H.264, 30–60 s, até 25 MiB, áudio audível e verificações de quadros pretos e variação visual. Isso **não** equivale à aprovação editorial.
+- A produção local não carrega o `.env`, não abre o banco nem envia nada para Cloudinary, Buffer ou TikTok. Não precisa de credenciais nem de `live_enabled`. Use `--help` para informar outro modelo, caminhos das CLIs ou pasta de saída.
+
+### Skills do HyperFrames
+
+As skills oficiais [HyperFrames](.claude/skills/hyperframes/SKILL.md) e [HyperFrames CLI](.claude/skills/hyperframes-cli/SKILL.md), do [release v0.9.85](https://github.com/heygen-com/hyperframes/releases/tag/v0.9.85), estão no escopo do projeto. Abra o checkout no Claude Code; reabra a sessão se `/hyperframes` e `/hyperframes-cli` ainda não aparecerem.
+
+As skills são guias de autoria. Não instalam o runtime Node do HyperFrames, não validam o `HyperFramesAdapter` e não são chamadas por `produzir-local`, que usa as CLIs locais do ArtCraft.
+
 ## Estrutura do projeto
 
 ```
@@ -228,11 +249,15 @@ Em Linux/macOS, use `ops/install-cron.sh` (imprime a linha de cron; você adicio
 
 ## Testes
 
+Regressões da produção local e do gate de variação visual, com subprocessos simulados:
+
 ```powershell
-pytest tests/ -v
+python -m pytest tests/test_producao_local.py tests/test_validator_cena_simulada.py -q
 ```
 
-Suíte: **204 testes** cobrindo todos os CPs (CP01-CP21):
+A suíte histórica inclui cenários que ainda acionam FFmpeg, Puppeteer ou ASR reais. Exclua ou isole esses cenários antes de rodar a suíte inteira; não use o banco e a configuração de produção para testes.
+
+Cobertura histórica dos checkpoints:
 - CP01 baseline: settings, database, state_machine, scheduler, scripts, ai provider, integrações (mock), vídeo (TTS/validator), orchestrator (73 testes)
 - CP02: P0/P1 defeitos corrigidos + testes de regressão (10 testes)
 - CP03: contratos Pydantic tipados (WorkflowState, Script, AudioAsset, VideoAsset, etc.)
@@ -241,8 +266,6 @@ Suíte: **204 testes** cobrindo todos os CPs (CP01-CP21):
 - CP11: logging JSON, métricas, circuit breaker, retry, health checks, dashboard HTML (9 testes)
 - CP12: observabilidade, dashboard administrativo, auditoria final (13 testes)
 - CP13-CP21: renderização real (Chromium/Puppeteer + FFmpeg), quality gates, circuit breaker + retry externo, validador inicializado, assisted resume, publication settings, qualidade configurável, resiliência integrada (48 testes)
-
-Zero regressões entre CPs.
 
 ## Arquitetura LangGraph (Supervisor + 12 Agentes)
 

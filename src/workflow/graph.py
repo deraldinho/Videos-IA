@@ -206,6 +206,11 @@ def supervisor(state: dict[str, Any]) -> dict[str, Any]:
     if status in {Stage.PUBLISHED.value, Stage.QUEUED.value}:
         estado_publicacao = status
         state["_next"] = NODE_MONITORING
+        if status == Stage.PUBLISHED.value:
+            # Ao entrar no monitoramento a partir de PUBLISHED, o status de
+            # controle do supervisor e MONITORED (nao deixa PUBLISHED, que e
+            # um estado de vídeo; MONITORED indica que o monitoramento roda).
+            estado_publicacao = "MONITORED"
         state["status"] = estado_publicacao
         state["current_stage"] = estado_publicacao
         return state

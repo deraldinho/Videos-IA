@@ -18,7 +18,8 @@ import json
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from itertools import combinations
 from pathlib import Path
 from typing import Optional
 
@@ -87,47 +88,15 @@ def _phash_similarity(hash1: np.ndarray, hash2: np.ndarray) -> float:
     return 1.0 - diff / float(hash1.size)
 
 
-def _compute_average_hash(image_bytes: bytes, size: int = 16) -> np.ndarray:
-    """Compute average perceptual hash from raw image bytes.
-
-    Steps:
-    1. Reshape to grayscale using luminance weights if RGB, else treat as grayscale
-    2. Area resize to (size, size) via strided decimation
-    3. Compute average pixel value
-    4. Generate binary hash: bit i = 1 if pixel > average else 0
-
-    Returns a numpy array of size*size binary bits (flattened).
-    """
-    try:
-        arr = np.frombuffer(image_bytes, dtype=np.uint8)
-        if len(arr) >= size * size * 3:
-            rgb = arr[: size * size * 3].reshape((size, size, 3))
-            gray = (0.299 * rgb[:, :, 0].astype(float) +
-                    0.587 * rgb[:, :, 1].astype(float) +
-                    0.114 * rgb[:, :, 2].astype(float))
-        else:
-            gray = arr[: size * size].astype(float).reshape((size, size))
-    except Exception:
-        gray = np.frombuffer(image_bytes, dtype=np.uint8)[: size * size].astype(float).reshape((size, size))
-
-    # Area resize via strided decimation
-    step_h = max(1, gray.shape[0] // size)
-    step_w = max(1, gray.shape[1] // size)
-    downsampled = gray[::step_h, ::step_w]
-
-    # Ensure exact size
-    if downsampled.shape[0] < size:
-        downsampled = np.pad(downsampled, ((0, size - downsampled.shape[0]), (0, 0)))
-    if downsampled.shape[1] < size:
-        downsampled = np.pad(downsampled, ((0, 0), (0, size - downsampled.shape[1])))
-
-    # Crop if too large
-    downsampled = downsampled[:size, :size]
-
-    avg = float(downsampled.mean())
-    binary_hash = (downsampled > avg).astype(np.uint8)
-
-    return binary_hash.flatten()
+def _frame_signature(image_bytes: bytes, size: int) -> tuple[np.ndarray, float]:
+    """Reduz a miniatura grayscale inteira por blocos, sem confundi-la com RGB."""
+    gray = np.frombuffer(image_bytes, dtype=np.uint8).reshape(size, size)
+    edges = np.linspace(0, size, min(16, size) + 1, dtype=int)
+    starts = edges[:-1]
+    widths = np.diff(edges)
+    totals = np.add.reduceat(np.add.reduceat(gray, starts, axis=0), starts, axis=1)
+    reduced = totals / np.outer(widths, widths)
+    return (reduced > reduced.mean()).ravel(), float(gray.mean())
 
 
 class FFprobeValidator:
@@ -138,10 +107,17 @@ class FFprobeValidator:
         ffprobe_bin: str = "ffprobe",
         ffmpeg_bin: str = "ffmpeg",
         thresholds: Optional[QualityThresholds] = None,
+        *,
+        require_quality_measurements: bool = False,
     ) -> None:
         self.ffprobe_bin = ffprobe_bin
         self.ffmpeg_bin = ffmpeg_bin
         self.thresholds = thresholds or QualityThresholds()
+        self.require_quality_measurements = require_quality_measurements
+
+    def _measurement_unavailable(self, name: str) -> None:
+        if self.require_quality_measurements:
+            raise PipelineError(f"Não foi possível medir {name} com FFmpeg.")
 
     def _probe(self, path: Path) -> dict:
         if not path.exists():
@@ -259,25 +235,12 @@ class FFprobeValidator:
             pass
 
         if strict:
-            thresholds = QualityThresholds(
-                max_black_ratio=(
-                    max_black_ratio
-                    if max_black_ratio is not None
-                    else self.thresholds.max_black_ratio
-                ),
-                max_continuous_black_seconds=(
-                    max_continuous_black_seconds
-                    if max_continuous_black_seconds is not None
-                    else self.thresholds.max_continuous_black_seconds
-                ),
-                min_mean_volume_db=(
-                    min_mean_volume_db
-                    if min_mean_volume_db is not None
-                    else self.thresholds.min_mean_volume_db
-                ),
-                dynamic_scene_samples=self.thresholds.dynamic_scene_samples,
-                dynamic_scene_thumbnail_size=self.thresholds.dynamic_scene_thumbnail_size,
-            )
+            overrides = {
+                "max_black_ratio": max_black_ratio,
+                "max_continuous_black_seconds": max_continuous_black_seconds,
+                "min_mean_volume_db": min_mean_volume_db,
+            }
+            thresholds = replace(self.thresholds, **{k: v for k, v in overrides.items() if v is not None})
             self._assert_quality_gates(path, info, thresholds)
 
         return info
@@ -296,10 +259,11 @@ class FFprobeValidator:
             # Ausência de áudio já é tratada acima quando require_audio=True.
             return
         ffmpeg = shutil.which(self.ffmpeg_bin)
-        if not ffmpeg:
+        mean_volume = self._read_mean_volume(ffmpeg, path) if ffmpeg else None
+        if mean_volume is None or np.isnan(mean_volume):
+            self._measurement_unavailable("o volume médio")
             return
-        mean_volume = self._read_mean_volume(ffmpeg, path)
-        if mean_volume is not None and mean_volume < thresholds.min_mean_volume_db:
+        if mean_volume < thresholds.min_mean_volume_db:
             raise PipelineError(
                 f"Áudio silencioso detectado (mean_volume {mean_volume} dB): {path}"
             )
@@ -313,6 +277,8 @@ class FFprobeValidator:
                 capture_output=True, text=True, timeout=120,
             )
         except (subprocess.TimeoutExpired, OSError):
+            return None
+        if proc.returncode:
             return None
         output = proc.stdout + "\n" + proc.stderr
         mean_volume: Optional[float] = None
@@ -330,6 +296,7 @@ class FFprobeValidator:
         """Rejeita vídeo com excesso de quadros pretos (fração e contínuo)."""
         ffmpeg = shutil.which(self.ffmpeg_bin)
         if not ffmpeg:
+            self._measurement_unavailable("quadros pretos")
             return
         try:
             proc = subprocess.run(
@@ -338,6 +305,10 @@ class FFprobeValidator:
                 capture_output=True, text=True, timeout=120,
             )
         except (subprocess.TimeoutExpired, OSError):
+            self._measurement_unavailable("quadros pretos")
+            return
+        if proc.returncode:
+            self._measurement_unavailable("quadros pretos")
             return
         output = proc.stdout + "\n" + proc.stderr
 
@@ -367,89 +338,43 @@ class FFprobeValidator:
             )
 
     def _assert_dynamic_scene(self, path: Path, info: VideoInfo, thresholds: QualityThresholds) -> None:
-        """Rejeita vídeo estático (mesmo conteúdo em todas as amostras).
-
-        Extrai miniaturas em branco e cinza em vários pontos do vídeo e as
-        compara byte a byte. Se todas forem idênticas, o vídeo é estático.
-
-        Adicionalmente, utiliza hashing perceptual (pHash) para detectar vídeos
-        com variação gradativa de cenas que o byte-a-byte pode não capturar
-        confiavelmente (ex: fade lento de vermelho para azul). Se todos os
-        amostras de pHash forem muito semelhantes (similaridade > 0.9), também
-        flagra o vídeo como estático, mantendo compatibilidade reversível.
-        """
+        """Rejeita vídeo apenas se todas as amostras forem iguais ou semelhantes."""
         ffmpeg = shutil.which(self.ffmpeg_bin)
-        if not ffmpeg or info.duration_seconds <= 0:
+        size = thresholds.dynamic_scene_thumbnail_size
+        if not ffmpeg or not np.isfinite(info.duration_seconds) or info.duration_seconds <= 0 or size <= 0:
+            self._measurement_unavailable("a variação visual")
             return
 
         n = max(2, thresholds.dynamic_scene_samples)
-        duration = info.duration_seconds
-        size = thresholds.dynamic_scene_thumbnail_size
-        timestamps = [duration * (i + 1) / (n + 1) for i in range(n)]
-
-        first_frame: Optional[bytes] = None
-        phashes: list[np.ndarray] = []
-        all_byte_identical = True
-        for t in timestamps:
+        frames = []
+        for i in range(n):
+            t = info.duration_seconds * (i + 1) / (n + 1)
             try:
                 proc = subprocess.run(
-                    [
-                        ffmpeg, "-v", "error", "-ss", str(t), "-i", str(path),
-                        "-frames:v", "1",
-                        "-vf", f"scale={size}:{size},format=gray",
-                        "-f", "rawvideo", "-",
-                    ],
+                    [ffmpeg, "-v", "error", "-ss", str(t), "-i", str(path),
+                     "-frames:v", "1", "-vf", f"scale={size}:{size},format=gray",
+                     "-threads:v", "1", "-f", "rawvideo", "-"],
                     capture_output=True, timeout=30,
                 )
             except (subprocess.TimeoutExpired, OSError):
+                self._measurement_unavailable("a variação visual")
                 return
-            if proc.returncode != 0 or not proc.stdout:
+            if proc.returncode or len(proc.stdout) != size * size:
+                self._measurement_unavailable("a variação visual")
                 return
-            if first_frame is None:
-                first_frame = proc.stdout
-                # Compute pHash for the first frame
-                phashes.append(_compute_average_hash(first_frame, size // 10))  # downsample to 16x16
-            elif proc.stdout != first_frame:
-                all_byte_identical = False
-                # Still compute pHash for this frame even if bytes differ
-                try:
-                    phashes.append(_compute_average_hash(proc.stdout, size // 10))
-                except Exception:
-                    pass
-                # Early exit: if we already found different bytes AND pHashes differ,
-                # the video has dynamic scenes — no need to continue checking.
-                # However, we continue to collect all pHashes for a final decision.
+            frames.append(proc.stdout)
 
-        # --- Byte-comparison primary check (existing behavior) ---
-        if all_byte_identical and first_frame is not None:
-            # Todas as amostras são idênticas byte-a-byte -> vídeo estático.
-            raise PipelineError(
-                f"Vídeo estático detectado (mesmo conteúdo em todas as amostras): {path}"
-            )
+        if all(frame == frames[0] for frame in frames[1:]):
+            raise PipelineError(f"Vídeo estático detectado (mesmo conteúdo em todas as amostras): {path}")
 
-        # --- pHash secondary check (new enhancement) ---
-        # If all pHashes are very similar (similarity > threshold (padrão 0.9 = Hamming distance < 10%)),
-        # flag as static even if bytes differ (handles gradual scene changes like fades).
-        if len(phashes) >= n and all_byte_identical is False:
-            # Compute pairwise similarities
-            similarities = []
-            for i in range(len(phashes)):
-                for j in range(i + 1, len(phashes)):
-                    sim = _phash_similarity(phashes[i], phashes[j])
-                    similarities.append(sim)
-
-            if similarities:
-                max_sim = max(similarities)
-                # Threshold: if all pHashes are very similar (similarity > thresholds.dynamic_scene_phash_threshold),
-                # flag the video as static. The default threshold means Hamming distance
-                # < 10% of hash size (e.g., for 256-bit hash, < 25 bits differ).
-                if max_sim > thresholds.dynamic_scene_phash_threshold:
-                    raise PipelineError(
-                        f"Vídeo estático detectado (hash perceptual semelhante em todas as amostras): {path}"
-                    )
-
-        # Se nenhuma das duas condições acima foi acionada, o vídeo é dinâmico.
-        # (Nenhum error foi raised => vídeo tem cenas variadas)
+        signatures = [_frame_signature(frame, size) for frame in frames]
+        # Em quadros uniformes o hash é idêntico mesmo durante uma troca de cor.
+        # Uma diferença de luminância > 12/255 também indica variação perceptível.
+        if all(
+            _phash_similarity(a, b) > thresholds.dynamic_scene_phash_threshold and abs(luma_a - luma_b) <= 12
+            for (a, luma_a), (b, luma_b) in combinations(signatures, 2)
+        ):
+            raise PipelineError(f"Vídeo estático detectado (hash perceptual semelhante em todas as amostras): {path}")
 
     def is_valid_mp4(self, path: Path) -> bool:
         """Retorna True se o arquivo é um MP4 válido (sem levantar exceção)."""
