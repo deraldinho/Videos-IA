@@ -262,12 +262,31 @@ def cmd_tick(orch: GraphOrchestrator, _: argparse.Namespace) -> int:
     - Health checks before/after via run_health_checks
     - Medição de tempo e logging estruturado
     - Códigos de retorno baseados na saúde do sistema
+    - Varredura de vídeos estagnados (stalled_videos) que transiciona para FAILED
+      vídeos não-terminais parados além do limite de inatividade, evitando
+      paradas indefinidas (loop agêntico P2).
     """
     # Incrementa contador de ticks antes da execução
     increment_tick()
 
     start = __import__("time").time()
     try:
+        # --- P2 LOOP AGÊNTICO: varredura periódica de vídeos estagnados -----
+        stalled = orch.db.stalled_videos(max_idle_seconds=3600)
+        for row in stalled:
+            vid = row["video_id"]
+            try:
+                orch.db.transition(
+                    vid,
+                    "FAILED",
+                    actor="system",
+                    note="Vídeo estagnado por inatividade além do limite (stalled_videos). "
+                         "Requer intervenção manual para retomada.",
+                )
+                print(f"Aviso: vídeo {vid} transicionado para FAILED (estagnado por inatividade).")
+            except PipelineError as exc:
+                print(f"Aviso: não foi possível falhar vídeo estagnado {vid}: {exc}")
+
         # Executa o pipeline diário
         result = cmd_run_daily(orch, _)
         duration = __import__("time").time() - start

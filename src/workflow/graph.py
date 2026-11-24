@@ -483,6 +483,11 @@ def quality_agent(state: dict[str, Any]) -> dict[str, Any]:
             }
         except Exception as exc:  # noqa: BLE001 - validação falhou, registra e segue
             result = {"valid": False, "errors": [str(exc)]}
+            # --- Alinhamento com MAX_RETRIES do supervisor (P2 loop agêntico) ---
+            errors = list(state.get("errors") or [])
+            errors.append(f"qualidade: {exc}")
+            state["errors"] = errors
+            state["retries"] = int(state.get("retries", 0)) + 1
     else:
         result = {"valid": False, "errors": ["Nenhum MP4 para validar"]}
     state["validation_results"] = result
