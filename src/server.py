@@ -311,14 +311,14 @@ async def agent_events_ws(websocket: WebSocket) -> None:
         # Snapshot dos eventos recentes.
         for ev in event_bus.snapshot(limit=200):
             try:
-                await websocket.send_text(ev.model_dump_json())
+                await websocket.send_text(ev.model_dump_safe())
             except Exception:
                 return
         # Push de novos eventos em tempo real.
         while True:
             try:
                 ev = await event_bus.next_event()
-                await websocket.send_text(ev.model_dump_json())
+                await websocket.send_text(ev.model_dump_safe())
             except WebSocketDisconnect:
                 break
             except Exception:

@@ -96,7 +96,7 @@ class BufferClient:
         except requests.RequestException as exc:
             raise PipelineError(f"Falha de rede no Buffer: {exc}") from exc
         if resp.status_code >= 400:
-            raise PipelineError(f"Buffer retornou HTTP {resp.status_code}: {resp.text[:500]}")
+            raise PipelineError(f"Buffer retornou HTTP {resp.status_code}") from None
         payload = resp.json()
         if "errors" in payload:
             raise PipelineError(f"Erros do Buffer: {payload['errors']}")

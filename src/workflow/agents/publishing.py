@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from pathlib import Path
 
+from src.publication_policy import can_publish
 from src.workflow.agents.base import BaseAgent
 from src.workflow.state import PublicationStatus, Stage
 
@@ -34,6 +35,21 @@ class PublishingAgent(BaseAgent):
         if compliance.get("blocked"):
             return self._add_error(state, "publish",
                                    "Publicação bloqueada pelo agente de conformidade")
+
+        # --- Ponto único de verdade: can_publish antes do upload (CR-05) ----
+        decision = can_publish(
+            state={
+                "mode": state.get("mode", "REVIEW"),
+                "live_enabled": bool(state.get("live_enabled", False)),
+                "auto_enabled": bool(state.get("auto_enabled", False)),
+                "approval_status": state.get("approval_status", "pending"),
+            }
+        )
+        if not decision.authorized:
+            return self._add_error(
+                state, "publish",
+                f"Publicação não autorizada pela política central: {decision.reason}",
+            )
 
         mp4_path = None
         if video_assets:

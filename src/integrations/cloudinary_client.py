@@ -133,8 +133,8 @@ class CloudinaryClient:
 
             if resp.status_code >= 400:
                 raise PipelineError(
-                    f"Cloudinary retornou HTTP {resp.status_code}: {resp.text[:500]}"
-                )
+                    f"Cloudinary retornou HTTP {resp.status_code}"
+                ) from None
 
             payload = resp.json()
             result = UploadResult(

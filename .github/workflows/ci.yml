@@ -42,7 +42,7 @@ jobs:
 
       - name: Relatório de cobertura (resumo)
         run: |
-          python -m pytest tests/ -q --cov=src --cov-report=term-missing -p no:cacheprovider || true
+          python -m pytest tests/ -q --cov=src --cov-report=term-missing -p no:cacheprovider --cov-fail-under=80
 
   check-sem-segredos:
     runs-on: ubuntu-latest
@@ -54,9 +54,9 @@ jobs:
 
       - name: Varredura de segredos (detect-secrets)
         run: |
-          pip install detect-secrets || true
-          detect-secrets scan --baseline .secrets.baseline || true
-          # Não falhar a CI apenas por varredura; registra resultado para revisão.
+          pip install detect-secrets
+          detect-secrets scan --baseline .secrets.baseline
+          # Falhar a build quando segredos novos forem detectados fora do baseline.
           cat .secrets.baseline 2>/dev/null || echo "Nenhum baseline gerado."
 
       - name: Verificar ausência de arquivos proibidos
