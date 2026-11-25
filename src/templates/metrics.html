@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Métricas — TikTok AI Autopilot{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Métricas</h1>
+    <p class="text-gray-600">Métricas operacionais e agregados de vídeos.</p>
+  </div>
+
+  <p id="error" class="hidden p-3 rounded-md border border-red-200 bg-red-50 text-red-800 text-sm"></p>
+
+  <!-- Estatísticas de vídeos (GET /api/stats) -->
+  <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+      <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      Agregados de vídeos (GET /api/stats)
+    </h2>
+    <div id="stats-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- preenchido por JS -->
+    </div>
+    <p id="stats-empty" class="hidden text-center py-6 text-sm text-gray-500">Nenhum dado de estatísticas disponível.</p>
+    <p id="stats-error" class="hidden text-sm text-red-700 mt-3"></p>
+  </div>
+
+  <!-- Métricas operacionais (GET /api/metrics) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        Counters
+      </h2>
+      <div id="counters-container" class="space-y-2">
+        <!-- preenchido por JS -->
+      </div>
+      <p id="counters-error" class="hidden text-sm text-red-700 mt-3"></p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        Gauges
+      </h2>
+      <div id="gauges-container" class="space-y-2">
+        <!-- preenchido por JS -->
+      </div>
+      <p id="gauges-error" class="hidden text-sm text-red-700 mt-3"></p>
+    </div>
+
+    <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        Uptime
+      </h2>
+      <div id="uptime-container" class="text-3xl font-bold mono text-gray-900">–</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const STATUS_LABELS = {
+    IDEA_CREATED: 'Ideia criada', SCRIPT_READY: 'Roteiro pronto', RENDERING: 'Renderizando',
+    RENDERED: 'Renderizado', VALIDATED: 'Validado', AWAITING_APPROVAL: 'Aguardando aprovação',
+    APPROVED: 'Aprovado', UPLOADING: 'Enviando', UPLOADED: 'Enviado', QUEUED: 'Na fila',
+    PUBLISHING: 'Publicando', PUBLISHED: 'Publicado', ACTION_REQUIRED: 'Ação requerida', FAILED: 'Falhou',
+  };
+
+  async function fetchJson(path) {
+    try {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) {
+      return { error: String(e) };
+    }
+  }
+
+  function showError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+
+  async function loadStats() {
+    const container = document.getElementById('stats-container');
+    const empty = document.getElementById('stats-empty');
+    const errorEl = document.getElementById('stats-error');
+    const data = await fetchJson('/api/stats');
+    if (data.error) {
+      showError('stats-error', 'Não foi possível carregar estatísticas: ' + window.escapeHtml(data.error));
+      return;
+    }
+    errorEl.classList.add('hidden');
+    const total = data.total || 0;
+    const byStatus = data.by_status || {};
+    let html = '<div class="p-4 rounded-xl border border-gray-200 bg-white"><div class="text-2xl font-bold text-gray-900">' + window.escapeHtml(total) + '</div><div class="text-xs text-gray-500 mt-1">Total de vídeos</div></div>';
+    if (Object.keys(byStatus).length === 0) {
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      Object.entries(byStatus).forEach(function (entry) {
+        const status = entry[0], count = entry[1];
+        html += '<div class="p-4 rounded-xl border border-gray-200 bg-white flex items-center justify-between">' +
+          '<div><div class="text-sm font-medium text-gray-900">' + window.escapeHtml(STATUS_LABELS[status] || status) + '</div><div class="text-xs text-gray-500 mt-0.5">' + window.escapeHtml(count) + ' vídeo(s)</div></div>' +
+          '<div class="text-2xl font-bold text-gray-900">' + window.escapeHtml(count) + '</div>' +
+          '</div>';
+      });
+    }
+    container.innerHTML = html;
+  }
+
+  async function loadMetricsSection(containerId, errorId, dataKey, emptyMsg) {
+    const container = document.getElementById(containerId);
+    const errorEl = document.getElementById(errorId);
+    const data = await fetchJson('/api/metrics');
+    if (data.error) {
+      showError(errorId, 'Não foi possível carregar métricas: ' + window.escapeHtml(data.error));
+      return;
+    }
+    errorEl.classList.add('hidden');
+    const uptime = data.uptime_seconds != null ? Math.floor(data.uptime_seconds) : 0;
+    document.getElementById('uptime-container').textContent = uptime + ' s';
+    const section = data[dataKey] || {};
+    if (Object.keys(section).length === 0) {
+      container.innerHTML = '<div class="text-xs text-gray-500 py-2">' + emptyMsg + '</div>';
+      return;
+    }
+    container.innerHTML = Object.entries(section).map(function (entry) {
+      return '<div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2 last:border-0"><span class="text-gray-600 truncate max-w-[160px]" title="' + window.escapeHtml(entry[0]) + '">' + window.escapeHtml(entry[0]) + '</span><span class="text-gray-900 mono text-right">' + window.escapeHtml(entry[1]) + '</span></div>';
+    }).join('');
+  }
+
+  loadStats();
+  loadMetricsSection('counters-container', 'counters-error', 'counters', 'Sem counters disponíveis.');
+  loadMetricsSection('gauges-container', 'gauges-error', 'gauges', 'Sem gauges disponíveis.');
+})();
+</script>
+{% endblock %}

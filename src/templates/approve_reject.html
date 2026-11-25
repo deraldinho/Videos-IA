@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Aprovar / Rejeitar — TikTok AI Autopilot{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Aprovar / Rejeitar</h1>
+    <p class="text-gray-600">Vídeos aguardando aprovação humana antes de seguir para publicação.</p>
+  </div>
+
+  <p id="error" class="hidden p-3 rounded-md border border-red-200 bg-red-50 text-red-800 text-sm"></p>
+  <p id="success" class="hidden p-3 rounded-md border border-green-200 bg-green-50 text-green-800 text-sm"></p>
+
+  <div id="count" class="text-sm text-gray-500"></div>
+
+  <div id="empty" class="hidden text-center py-10">
+    <div class="bg-white rounded-xl border border-gray-200 p-8 inline-block">
+      <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 13l4 4L19 7"></path></svg>
+      <h3 class="font-semibold text-gray-900">Sem vídeos pendentes</h3>
+      <p class="text-gray-500 text-sm mt-1">Não há vídeos aguardando aprovação no momento.</p>
+    </div>
+  </div>
+
+  <div id="list" class="space-y-3">
+    <!-- preenchido por JS -->
+  </div>
+</div>
+
+<!-- Modal de rejeição -->
+<div id="reject-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+  <div class="fixed inset-0 bg-black opacity-50" onclick="closeReject()"></div>
+  <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-lg relative">
+    <h3 class="font-bold text-gray-900 mb-3">Rejeitar vídeo</h3>
+    <p class="text-sm text-gray-600 mb-4" id="reject-video-info"></p>
+    <input type="hidden" id="reject-video-id">
+    <label class="block text-sm font-medium text-gray-700 mb-2">Motivo da rejeição</label>
+    <textarea id="reject-motivo" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none" rows="3" placeholder="Por que este vídeo não deve ser publicado?"></textarea>
+    <div class="mt-5 flex justify-end gap-2">
+      <button onclick="closeReject()" class="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Cancelar</button>
+      <button onclick="confirmReject()" class="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded hover:bg-red-700">Confirmar rejeição</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const STATUS_LABELS = {
+    IDEA_CREATED: 'Ideia criada', SCRIPT_READY: 'Roteiro pronto', RENDERING: 'Renderizando',
+    RENDERED: 'Renderizado', VALIDATED: 'Validado', AWAITING_APPROVAL: 'Aguardando aprovação',
+    APPROVED: 'Aprovado', UPLOADING: 'Enviando', UPLOADED: 'Enviado', QUEUED: 'Na fila',
+    PUBLISHING: 'Publicando', PUBLISHED: 'Publicado', ACTION_REQUIRED: 'Ação requerida', FAILED: 'Falhou',
+  };
+
+  const listEl = document.getElementById('list');
+  const emptyEl = document.getElementById('empty');
+  const countEl = document.getElementById('count');
+  const errorEl = document.getElementById('error');
+  const successEl = document.getElementById('success');
+
+  function badge(status) {
+    const cls = 'bg-amber-100 text-amber-800 border-amber-200';
+    return '<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-medium border ' + cls + '">' +
+      '<span class="w-1.5 h-1.5 rounded-full bg-current opacity-70"></span>' +
+      window.escapeHtml(STATUS_LABELS[status] || status) + '</span>';
+  }
+
+  function clear() {
+    errorEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+  }
+
+  function showSuccess(msg) {
+    errorEl.classList.add('hidden');
+    successEl.textContent = msg;
+    successEl.classList.remove('hidden');
+    setTimeout(function () { successEl.classList.add('hidden'); }, 5000);
+  }
+
+  async function load() {
+    clear();
+    try {
+      const res = await fetch('/api/videos?status=AWAITING_APPROVAL');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const videos = data.videos || [];
+      countEl.textContent = videos.length + ' vídeo(s) pendente(s)';
+      if (videos.length === 0) {
+        listEl.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+      emptyEl.classList.add('hidden');
+      listEl.innerHTML = videos.map(function (v) {
+        const created = v.created_at ? new Date(v.created_at).toLocaleString('pt-BR') : '-';
+        return '<div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">' +
+          '<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">' +
+          '<div><div class="text-sm font-semibold text-gray-900 truncate max-w-xs" title="' + window.escapeHtml(v.topic || '') + '">' + window.escapeHtml(v.topic || '-') + '</div>' +
+          '<div class="text-xs text-gray-500 mono">' + window.escapeHtml(v.video_id) + '</div>' +
+          '<div class="text-xs text-gray-500 mt-1">' + window.escapeHtml(v.template || '-') + ' · ' + created + '</div></div>' +
+          '<div>' + badge(v.status) + '</div>' +
+          '</div>' +
+          '<div class="flex sm:flex-row gap-3">' +
+          '<button onclick="approveVideo(\'' + window.escapeHtmlJS(v.video_id) + '\')" class="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition">Aprovar</button>' +
+          '<button onclick="openReject(\'' + window.escapeHtmlJS(v.video_id) + '\', \'' + window.escapeHtmlJS(v.topic || '') + '\')" class="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition">Rejeitar</button>' +
+          '</div>' +
+          '</div>';
+      }).join('');
+    } catch (e) {
+      errorEl.textContent = 'Não foi possível carregar os vídeos pendentes: ' + window.escapeHtml(String(e));
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  window.escapeHtmlJS = function (s) {
+    return String(s == null ? '' : s).replace(/'/g, '&#39;');
+  };
+
+  async function approveVideo(videoId) {
+    try {
+      const res = await window.apiFetch('/api/videos/' + videoId + '/approve', { method: 'POST' });
+      showSuccess(res.note || 'Vídeo aprovado.');
+      setTimeout(load, 600);
+    } catch (e) {
+      errorEl.textContent = 'Falha ao aprovar: ' + window.escapeHtml(String(e));
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  let pendingRejectId = null;
+  window.openReject = function (videoId, topic) {
+    pendingRejectId = videoId;
+    document.getElementById('reject-video-id').value = videoId;
+    document.getElementById('reject-video-info').textContent = 'Vídeo: ' + window.escapeHtml(topic || '-') + ' (' + window.escapeHtml(videoId) + ')';
+    document.getElementById('reject-motivo').value = '';
+    document.getElementById('reject-modal').classList.remove('hidden');
+  };
+  window.closeReject = function () {
+    document.getElementById('reject-modal').classList.add('hidden');
+    pendingRejectId = null;
+  };
+  window.confirmReject = function () {
+    if (!pendingRejectId) return;
+    const motivo = document.getElementById('reject-motivo').value || 'rejeitado via UI';
+    window.apiFetch('/api/videos/' + pendingRejectId + '/reject', {
+      method: 'POST',
+      body: JSON.stringify({ motivo: motivo })
+    }).then(function (res) {
+      closeReject();
+      showSuccess(res.note || 'Vídeo rejeitado.');
+      setTimeout(load, 600);
+    }).catch(function (e) {
+      errorEl.textContent = 'Falha ao rejeitar: ' + window.escapeHtml(String(e));
+      errorEl.classList.remove('hidden');
+    });
+  };
+
+  load();
+})();
+</script>
+{% endblock %}

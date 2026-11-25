@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Detalhe do vídeo — TikTok AI Autopilot{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Detalhe do vídeo</h1>
+      <p class="text-gray-600">Todos os campos e ações disponíveis para este vídeo.</p>
+    </div>
+    <a href="/videos" class="text-sm font-medium text-red-600 hover:underline flex items-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+      Voltar à lista
+    </a>
+  </div>
+
+  <p id="error" class="hidden p-3 rounded-md border border-red-200 bg-red-50 text-red-800 text-sm"></p>
+  <p id="success" class="hidden p-3 rounded-md border border-green-200 bg-green-50 text-green-800 text-sm"></p>
+
+  <!-- Carregando / vazio -->
+  <div id="loader" class="flex items-center justify-center py-8">
+    <span class="text-sm text-gray-500">Carregando…</span>
+  </div>
+  <div id="not-found" class="hidden text-center py-12">
+    <h2 class="text-lg font-semibold text-gray-900">Vídeo não encontrado</h2>
+    <p class="text-gray-500 mt-2">O vídeo solicitado não existe.</p>
+  </div>
+
+  <!-- Conteúdo do detalhe (exibido após carregar) -->
+  <div id="detail" class="hidden space-y-6">
+    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-gray-900" id="d-title"></h2>
+          <p class="text-sm text-gray-500 mono" id="d-video-id"></p>
+        </div>
+        <span id="d-status-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium border"></span>
+      </div>
+
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div class="col-span-2">
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Tópico</dt>
+          <dd class="text-gray-900" id="d-topic"></dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Título</dt>
+          <dd class="text-gray-900" id="d-title2"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Template</dt>
+          <dd class="text-gray-700 mono" id="d-template"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Tipo (kind)</dt>
+          <dd class="text-gray-700 mono" id="d-kind"></dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Descrição</dt>
+          <dd class="text-gray-700 whitespace-pre-wrap" id="d-description"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Duração alvo</dt>
+          <dd class="text-gray-700" id="d-seconds"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Execution ID</dt>
+          <dd class="text-gray-700 mono truncate" id="d-execution-id"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Criado em</dt>
+          <dd class="text-gray-700" id="d-created-at"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Atualizado em</dt>
+          <dd class="text-gray-700" id="d-updated-at"></dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Mensagem de erro</dt>
+          <dd class="text-red-700 whitespace-pre-wrap" id="d-error-message"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Tentativas (retry)</dt>
+          <dd class="text-gray-700" id="d-retry-count"></dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Caminho MP4 local</dt>
+          <dd class="flex items-center gap-2" id="d-mp4"></dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Cloudinary URL</dt>
+          <dd class="flex items-center gap-2" id="d-cloudinary"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Buffer post ID</dt>
+          <dd class="text-gray-700 mono" id="d-buffer-post-id"></dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Buffer post state</dt>
+          <dd class="text-gray-700 mono" id="d-buffer-post-state"></dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- Ações -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <h3 class="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        Ações
+      </h3>
+      <div id="actions" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- preenchido por JS -->
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const STATUS_LABELS = {
+    IDEA_CREATED: 'Ideia criada', SCRIPT_READY: 'Roteiro pronto', RENDERING: 'Renderizando',
+    RENDERED: 'Renderizado', VALIDATED: 'Validado', AWAITING_APPROVAL: 'Aguardando aprovação',
+    APPROVED: 'Aprovado', UPLOADING: 'Enviando', UPLOADED: 'Enviado', QUEUED: 'Na fila',
+    PUBLISHING: 'Publicando', PUBLISHED: 'Publicado', ACTION_REQUIRED: 'Ação requerida', FAILED: 'Falhou',
+  };
+  const STATUS_COLOR = {
+    PUBLISHED: 'bg-green-100 text-green-800 border-green-200',
+    APPROVED: 'bg-blue-100 text-blue-800 border-blue-200',
+    AWAITING_APPROVAL: 'bg-amber-100 text-amber-800 border-amber-200',
+    FAILED: 'bg-red-100 text-red-800 border-red-200',
+    RENDERING: 'bg-purple-100 text-purple-800 border-purple-200',
+    PUBLISHING: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    UPLOADING: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+    QUEUED: 'bg-gray-100 text-gray-800 border-gray-200',
+    IDEA_CREATED: 'bg-gray-100 text-gray-800 border-gray-200',
+    SCRIPT_READY: 'bg-gray-100 text-gray-800 border-gray-200',
+    RENDERED: 'bg-gray-100 text-gray-800 border-gray-200',
+    VALIDATED: 'bg-gray-100 text-gray-800 border-gray-200',
+    UPLOADED: 'bg-gray-100 text-gray-800 border-gray-200',
+    ACTION_REQUIRED: 'bg-orange-100 text-orange-800 border-orange-200',
+  };
+
+  const videoId = window.location.pathname.split('/').pop();
+  const loader = document.getElementById('loader');
+  const detail = document.getElementById('detail');
+  const notFound = document.getElementById('not-found');
+  const errorEl = document.getElementById('error');
+  const successEl = document.getElementById('success');
+
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value == null || value === '' ? '-' : value;
+  }
+
+  function badge(status) {
+    const cls = STATUS_COLOR[status] || 'bg-gray-100 text-gray-600 border-gray-200';
+    return '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium border ' + cls + '">' +
+      '<span class="w-1.5 h-1.5 rounded-full bg-current opacity-70"></span>' +
+      window.escapeHtml(STATUS_LABELS[status] || status) + '</span>';
+  }
+
+  function linkOrDash(url, label) {
+    if (!url) return '<span class="text-gray-400">-</span>';
+    return '<a href="' + window.escapeHtml(url) + '" target="_blank" rel="noopener" class="text-sm text-red-600 hover:underline mono truncate max-w-xs" title="' + window.escapeHtml(url) + '">' + window.escapeHtml(label || url) + '</a>';
+  }
+
+  async function load() {
+    try {
+      const res = await fetch('/api/videos/' + videoId);
+      if (res.status === 404) {
+        loader.hidden = true;
+        notFound.hidden = false;
+        return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const v = await res.json();
+
+      loader.hidden = true;
+      detail.hidden = false;
+
+      setText('d-video-id', v.video_id);
+      setText('d-title', v.title);
+      setText('d-title2', v.title);
+      setText('d-topic', v.topic);
+      setText('d-template', v.template);
+      setText('d-kind', v.kind);
+      setText('d-description', v.description);
+      setText('d-seconds', v.total_seconds != null ? v.total_seconds + ' s' : '-');
+      setText('d-execution-id', v.execution_id);
+      setText('d-created-at', v.created_at ? new Date(v.created_at).toLocaleString('pt-BR') : '-');
+      setText('d-updated-at', v.updated_at ? new Date(v.updated_at).toLocaleString('pt-BR') : '-');
+      setText('d-error-message', v.error_message);
+      setText('d-retry-count', v.retry_count);
+      setText('d-buffer-post-id', v.buffer_post_id);
+      setText('d-buffer-post-state', v.buffer_post_state);
+
+      document.getElementById('d-status-badge').innerHTML = badge(v.status);
+
+      // MP4
+      const mp4El = document.getElementById('d-mp4');
+      if (v.mp4_path) {
+        mp4El.innerHTML = linkOrDash(v.mp4_path, 'Abrir MP4');
+      } else {
+        mp4El.innerHTML = '<span class="text-gray-400">-</span>';
+      }
+      // Cloudinary
+      const cldEl = document.getElementById('d-cloudinary');
+      if (v.cloudinary_url) {
+        cldEl.innerHTML = linkOrDash(v.cloudinary_url, 'Abrir no Cloudinary');
+      } else {
+        cldEl.innerHTML = '<span class="text-gray-400">-</span>';
+      }
+
+      // Ações
+      const actions = document.getElementById('actions');
+      let html = '';
+      if (v.status === 'AWAITING_APPROVAL') {
+        html += '<button onclick="approveVideo()" class="px-4 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition shadow-sm">Aprovar</button>';
+        html += '<button onclick="openReject()" class="px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition shadow-sm">Rejeitar</button>';
+        // Reject modal (simples)
+        html += '<div id="reject-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">' +
+          '<div class="fixed inset-0 bg-black opacity-50"></div>' +
+          '<div class="bg-white rounded-xl p-6 w-full max-w-md shadow-lg relative">' +
+          '<h3 class="font-bold text-gray-900 mb-3">Rejeitar vídeo</h3>' +
+          '<p class="text-sm text-gray-600 mb-4">Informe o motivo da rejeição:</p>' +
+          '<textarea id="reject-motivo" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none" rows="3"></textarea>' +
+          '<div class="mt-5 flex justify-end gap-2">' +
+          '<button onclick="closeReject()" class="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Cancelar</button>' +
+          '<button onclick="rejectVideo()" class="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded hover:bg-red-700">Confirmar rejeição</button>' +
+          '</div>' +
+          '</div>' +
+          '</div>';
+      } else if (v.status === 'FAILED') {
+        html += '<button onclick="retryVideo()" class="px-4 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition shadow-sm">Retry (limpar erro)</button>';
+      }
+      html += '<a href="/videos" class="px-4 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Voltar à lista</a>';
+      actions.innerHTML = html;
+    } catch (e) {
+      loader.hidden = true;
+      errorEl.textContent = 'Não foi possível carregar o vídeo: ' + window.escapeHtml(String(e));
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  function show(type, msg) {
+    errorEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+    const el = type === 'success' ? successEl : errorEl;
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    setTimeout(function () { el.classList.add('hidden'); }, 5000);
+  }
+
+  async function postAction(path) {
+    try {
+      const res = await window.apiFetch(path, { method: 'POST' });
+      show('success', res.note || 'Ação realizada com sucesso.');
+      setTimeout(function () { window.location.reload(); }, 800);
+    } catch (e) {
+      show('error', 'Falha ao executar a ação: ' + window.escapeHtml(String(e)));
+    }
+  }
+
+  window.approveVideo = function () { postAction('/api/videos/' + videoId + '/approve'); };
+  window.openReject = function () { document.getElementById('reject-modal').classList.remove('hidden'); };
+  window.closeReject = function () { document.getElementById('reject-modal').classList.add('hidden'); };
+  window.rejectVideo = function () {
+    const motivo = document.getElementById('reject-motivo').value || 'rejeitado via UI';
+    window.apiFetch('/api/videos/' + videoId + '/reject', {
+      method: 'POST',
+      body: JSON.stringify({ motivo: motivo })
+    }).then(function (res) {
+      show('success', res.note || 'Vídeo rejeitado.');
+      setTimeout(function () { window.location.reload(); }, 800);
+    }).catch(function (e) { show('error', 'Falha ao rejeitar: ' + window.escapeHtml(String(e))); });
+  };
+  window.retryVideo = function () { postAction('/api/videos/' + videoId + '/retry'); };
+
+  load();
+})();
+</script>
+{% endblock %}

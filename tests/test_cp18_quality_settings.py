@@ -16,6 +16,7 @@ Cenários (TDD: RED → patch → GREEN):
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -29,8 +30,10 @@ from src.video.validator import FFprobeValidator, QualityThresholds
 # Helpers — geração de MP4 de teste com FFmpeg                                #
 # --------------------------------------------------------------------------- #
 
-RESOLUTION = "1080x1920"
-FPS = 30
+_RESOLUTION = "1080x1920"
+_FPS = 30
+
+_FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None
 
 
 def _run_ffmpeg(args: list[str]) -> None:
@@ -40,13 +43,13 @@ def _run_ffmpeg(args: list[str]) -> None:
 def make_black_transition(path: Path) -> None:
     """Vídeo com 0.5s de preto em 2s -> ratio 0.25 (aceito pelo default 0.50)."""
     _run_ffmpeg([
-        "-f", "lavfi", "-i", f"color=c=red:s={RESOLUTION}:r={FPS}:d=1",
-        "-f", "lavfi", "-i", f"color=c=black:s={RESOLUTION}:r={FPS}:d=0.5",
-        "-f", "lavfi", "-i", f"color=c=red:s={RESOLUTION}:r={FPS}:d=0.5",
+        "-f", "lavfi", "-i", f"color=c=red:s={_RESOLUTION}:r={_FPS}:d=1",
+        "-f", "lavfi", "-i", f"color=c=black:s={_RESOLUTION}:r={_FPS}:d=0.5",
+        "-f", "lavfi", "-i", f"color=c=red:s={_RESOLUTION}:r={_FPS}:d=0.5",
         "-f", "lavfi", "-i", f"sine=frequency=440:d=2",
         "-filter_complex", "[0:v][1:v][2:v]concat=n=3:v=1:a=0,format=yuv420p[v]",
         "-map", "[v]", "-map", "3:a",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(FPS),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(_FPS),
         "-c:a", "aac", "-shortest", str(path),
     ])
 
@@ -109,6 +112,7 @@ def test_quality_settings_defaults_iguais_aos_hardcoded(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 # 3. Limiares customizados do settings afetam a validação                     #
 # --------------------------------------------------------------------------- #
+@pytest.mark.skipif(not _FFMPEG_AVAILABLE, reason="ffmpeg não disponível no ambiente")
 def test_validator_usa_thresholds_do_settings_rejeita_mais_rigido(tmp_path: Path) -> None:
     """max_black_ratio=0.1 do settings rejeita o vídeo de transição (ratio 0.25)
     que o default (0.50) aceita — prova que os limiares vêm do settings."""

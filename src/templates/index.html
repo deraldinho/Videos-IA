@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — TikTok AI Autopilot{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+    <p class="text-gray-600 mt-1">Visão geral da automação de vídeos do TikTok AI Autopilot.</p>
+  </div>
+
+  <!-- Atalhos rápidos -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <a href="/videos" class="group flex flex-col gap-2 p-4 rounded-xl border border-gray-200 bg-white hover:border-red-300 hover:bg-red-50 transition">
+      <span class="text-gray-400 group-hover:text-red-600 transition flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        Vídeos
+      </span>
+      <span class="text-lg font-semibold text-gray-900 group-hover:text-red-700 transition">Gerenciar vídeos</span>
+    </a>
+    <a href="/create" class="group flex flex-col gap-2 p-4 rounded-xl border border-gray-200 bg-white hover:border-red-300 hover:bg-red-50 transition">
+      <span class="text-gray-400 group-hover:text-red-600 transition flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+        Criar
+      </span>
+      <span class="text-lg font-semibold text-gray-900 group-hover:text-red-700 transition">Novo vídeo</span>
+    </a>
+    <a href="/approve-reject" class="group flex flex-col gap-2 p-4 rounded-xl border border-gray-200 bg-white hover:border-red-300 hover:bg-red-50 transition">
+      <span class="text-gray-400 group-hover:text-red-600 transition flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        Aprovação
+      </span>
+      <span class="text-lg font-semibold text-gray-900 group-hover:text-red-700 transition">Aprovar / Rejeitar</span>
+    </a>
+    <a href="/metrics" class="group flex flex-col gap-2 p-4 rounded-xl border border-gray-200 bg-white hover:border-red-300 hover:bg-red-50 transition">
+      <span class="text-gray-400 group-hover:text-red-600 transition flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        Métricas
+      </span>
+      <span class="text-lg font-semibold text-gray-900 group-hover:text-red-700 transition">Estatísticas</span>
+    </a>
+  </div>
+
+  <!-- Resumo por status -->
+  <h2 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
+    <span class="w-1 h-5 bg-red-600 rounded"></span> Resumo por status
+  </h2>
+  <div id="stats-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- preenchido por JS -->
+  </div>
+  <p id="stats-error" class="hidden p-3 rounded-md border border-red-200 bg-red-50 text-red-800 text-sm"></p>
+
+  <!-- Health check e métricas rápidas -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="p-5 rounded-xl border border-gray-200 bg-white">
+      <h3 class="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        Health check
+      </h3>
+      <div id="health-container" class="space-y-2">
+        <!-- preenchido por JS -->
+      </div>
+      <p id="health-error" class="hidden text-sm text-red-700 mt-3"></p>
+    </div>
+
+    <div class="p-5 rounded-xl border border-gray-200 bg-white">
+      <h3 class="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        Métricas rápidas
+      </h3>
+      <div id="metrics-container" class="space-y-3">
+        <!-- preenchido por JS -->
+      </div>
+      <p id="metrics-error" class="hidden text-sm text-red-700 mt-3"></p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const STATUS_LABELS = {
+    IDEA_CREATED: 'Ideia criada', SCRIPT_READY: 'Roteiro pronto', RENDERING: 'Renderizando',
+    RENDERED: 'Renderizado', VALIDATED: 'Validado', AWAITING_APPROVAL: 'Aguardando aprovação',
+    APPROVED: 'Aprovado', UPLOADING: 'Enviando', UPLOADED: 'Enviado', QUEUED: 'Na fila',
+    PUBLISHING: 'Publicando', PUBLISHED: 'Publicado', ACTION_REQUIRED: 'Ação requerida', FAILED: 'Falhou',
+  };
+  const STATUS_COLOR = {
+    PUBLISHED: 'bg-green-100 text-green-800 border-green-200',
+    APPROVED: 'bg-blue-100 text-blue-800 border-blue-200',
+    AWAITING_APPROVAL: 'bg-amber-100 text-amber-800 border-amber-200',
+    FAILED: 'bg-red-100 text-red-800 border-red-200',
+    RENDERING: 'bg-purple-100 text-purple-800 border-purple-200',
+    PUBLISHING: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    UPLOADING: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+    QUEUED: 'bg-gray-100 text-gray-800 border-gray-200',
+    IDEA_CREATED: 'bg-gray-100 text-gray-800 border-gray-200',
+    SCRIPT_READY: 'bg-gray-100 text-gray-800 border-gray-200',
+    RENDERED: 'bg-gray-100 text-gray-800 border-gray-200',
+    VALIDATED: 'bg-gray-100 text-gray-800 border-gray-200',
+    UPLOADED: 'bg-gray-100 text-gray-800 border-gray-200',
+    ACTION_REQUIRED: 'bg-orange-100 text-orange-800 border-orange-200',
+  };
+
+  async function fetchJson(path) {
+    try {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) {
+      return { error: String(e) };
+    }
+  }
+
+  function badge(status) {
+    const cls = STATUS_COLOR[status] || 'bg-gray-100 text-gray-600 border-gray-200';
+    return '<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-medium border ' + cls + '">' +
+      '<span class="w-1.5 h-1.5 rounded-full bg-current opacity-70"></span>' +
+      window.escapeHtml(STATUS_LABELS[status] || status) + '</span>';
+  }
+
+  async function loadStats() {
+    const container = document.getElementById('stats-container');
+    const errorEl = document.getElementById('stats-error');
+    const data = await fetchJson('/api/stats');
+    if (data.error) {
+      errorEl.textContent = 'Não foi possível carregar o resumo de status: ' + window.escapeHtml(data.error);
+      errorEl.classList.remove('hidden');
+      container.innerHTML = '<div class="col-span-full p-4 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500">Indisponível</div>';
+      return;
+    }
+    errorEl.classList.add('hidden');
+    const total = data.total || 0;
+    const byStatus = data.by_status || {};
+    let html = '<div class="col-span-full lg:col-span-2 p-5 rounded-xl border border-gray-200 bg-white"><div class="text-2xl font-bold text-gray-900">' + window.escapeHtml(total) + '</div><div class="text-xs text-gray-500 mt-1">Total de vídeos</div></div>';
+    Object.entries(byStatus).forEach(function (entry) {
+      const status = entry[0], count = entry[1];
+      html += '<div class="p-4 rounded-xl border border-gray-200 bg-white flex items-center justify-between">' +
+        '<div><div class="text-sm font-medium text-gray-900">' + window.escapeHtml(STATUS_LABELS[status] || status) + '</div><div class="text-xs text-gray-500 mt-0.5">' + window.escapeHtml(count) + ' vídeo(s)</div></div>' +
+        '<div class="text-2xl font-bold text-gray-900">' + window.escapeHtml(count) + '</div>' +
+        '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  async function loadHealth() {
+    const container = document.getElementById('health-container');
+    const errorEl = document.getElementById('health-error');
+    const data = await fetchJson('/api/health');
+    if (data.error) {
+      errorEl.textContent = 'Não foi possível carregar o health check: ' + window.escapeHtml(data.error);
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    errorEl.classList.add('hidden');
+    const healthy = data.healthy === true;
+    const checks = data.checks || {};
+    let html = '<div class="flex items-center gap-2 mb-3"><span class="w-2 h-2 rounded-full ' + (healthy ? 'bg-green-500' : 'bg-red-500') + '"></span><span class="text-sm font-medium ' + (healthy ? 'text-green-800' : 'text-red-800') + '">' + (healthy ? 'Sistema saudável' : 'Sistema com problemas') + '</span></div>';
+    Object.entries(checks).forEach(function (entry) {
+      const name = entry[0], check = entry[1] || {};
+      const ok = check.ok !== false;
+      const detail = check.detail ? ' — ' + window.escapeHtml(String(check.detail)) : '';
+      html += '<div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2 last:border-0"><span class="text-gray-700 truncate max-w-[150px]" title="' + window.escapeHtml(name) + '">' + window.escapeHtml(name) + '</span><span class="text-xs font-medium mono ' + (ok ? 'text-green-700' : 'text-red-700') + '">' + (ok ? 'OK' : 'FALHA') + '</span>' + escapeHtmlSafe(detail) + '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  function escapeHtmlSafe(s) { return s; } // detail already escaped via window.escapeHtml above
+
+  async function loadMetrics() {
+    const container = document.getElementById('metrics-container');
+    const errorEl = document.getElementById('metrics-error');
+    const data = await fetchJson('/api/metrics');
+    if (data.error) {
+      errorEl.textContent = 'Não foi possível carregar métricas: ' + window.escapeHtml(data.error);
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    errorEl.classList.add('hidden');
+    const uptime = data.uptime_seconds != null ? Math.floor(data.uptime_seconds) : 0;
+    const counters = data.counters || {};
+    const gauges = data.gauges || {};
+    let html = '<div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2"><span class="text-gray-700">Uptime</span><span class="text-gray-900 mono text-right">' + uptime + 's</span></div>';
+    Object.entries(counters).forEach(function (entry) {
+      html += '<div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2"><span class="text-gray-600 text-sm truncate max-w-[140px]" title="' + window.escapeHtml(entry[0]) + '">' + window.escapeHtml(entry[0]) + '</span><span class="text-gray-900 mono text-right">' + window.escapeHtml(entry[1]) + '</span></div>';
+    });
+    Object.entries(gauges).forEach(function (entry) {
+      html += '<div class="flex items-center justify-between text-sm border-b border-gray-100 pb-2"><span class="text-gray-600 text-sm truncate max-w-[140px]" title="' + window.escapeHtml(entry[0]) + '">' + window.escapeHtml(entry[0]) + '</span><span class="text-gray-900 mono text-right">' + window.escapeHtml(entry[1]) + '</span></div>';
+    });
+    if (Object.keys(counters).length === 0 && Object.keys(gauges).length === 0) {
+      html += '<div class="text-xs text-gray-500 mt-2">Sem métricas disponíveis.</div>';
+    }
+    container.innerHTML = html;
+  }
+
+  loadStats();
+  loadHealth();
+  loadMetrics();
+})();
+</script>
+{% endblock %}

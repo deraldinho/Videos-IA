@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}TikTok AI Autopilot{% endblock %}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .flash { animation: slideIn 0.25s ease-out forwards; }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .toast { animation: toastIn 0.25s ease-out forwards; }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
+
+  <!-- Navbar -->
+  {% block navbar %}
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-3">
+          <div class="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-md bg-red-600">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          </div>
+          <div>
+            <span class="font-bold text-gray-900">TikTok AI Autopilot</span>
+            <span class="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">UI ao vivo</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="/" class="text-sm font-medium text-gray-700 hover:text-red-600">Home</a>
+          <a href="/videos" class="text-sm font-medium text-gray-700 hover:text-red-600">Vídeos</a>
+          <a href="/create" class="text-sm font-medium text-gray-700 hover:text-red-600">Criar vídeo</a>
+          <a href="/approve-reject" class="text-sm font-medium text-gray-700 hover:text-red-600">Aprovar/Rejeitar</a>
+          <a href="/metrics" class="text-sm font-medium text-gray-700 hover:text-red-600">Métricas</a>
+          <a href="/agents" class="text-sm font-medium text-gray-700 hover:text-red-600">Agentes</a>
+          <a href="/api/docs" class="text-xs font-medium text-gray-500 hover:text-red-600 border border-gray-300 rounded px-2.5 py-0.5">Docs API</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+  {% endblock %}
+
+  <!-- Flash messages (renderizadas quando o contexto enviar flashes/flash) -->
+  {% block flash %}
+  {% if flashes %}
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-2">
+    {% for flash in flashes %}
+    <div class="flash px-4 py-3 rounded-md border text-sm
+      {% if flash.type == 'error' %}border-red-200 bg-red-50 text-red-800{% elif flash.type == 'success' %}border-green-200 bg-green-50 text-green-800{% elif flash.type == 'warning' %}border-amber-200 bg-amber-50 text-amber-800{% else %}border-blue-200 bg-blue-50 text-blue-800{% endif %}"
+      role="alert">
+      {{ flash.message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% elif flash %}
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flash px-4 py-3 rounded-md border text-sm
+      {% if flash_type == 'error' %}border-red-200 bg-red-50 text-red-800{% elif flash_type == 'success' %}border-green-200 bg-green-50 text-green-800{% elif flash_type == 'warning' %}border-amber-200 bg-amber-50 text-amber-800{% else %}border-blue-200 bg-blue-50 text-blue-800{% endif %}"
+      role="alert">
+      {{ flash }}
+    </div>
+  </div>
+  {% endif %}
+  {% endblock %}
+
+  <main class="flex-1">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <!-- Footer -->
+  {% block footer %}
+  <footer class="border-t border-gray-200 bg-white mt-auto py-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <p class="text-xs text-gray-500">TikTok AI Autopilot — Interface de UI ao vivo</p>
+      <div class="flex items-center gap-4 text-xs text-gray-500">
+        <span class="mono">v1.0.0</span>
+        <a href="/api/health" class="hover:text-gray-700">Health</a>
+      </div>
+    </div>
+  </footer>
+  {% endblock %}
+
+  <!-- Área de toast (notificações temporárias) -->
+  <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Helpers globais: fetch com tratamento de erro e toast -->
+  <script>
+  (function () {
+    window.escapeHtml = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    };
+
+    window.showToast = function (message, type) {
+      type = type || 'info';
+      var container = document.getElementById('toast-container');
+      var colors = { info: 'bg-blue-50 border-blue-200 text-blue-800', success: 'bg-green-50 border-green-200 text-green-800', warning: 'bg-amber-50 border-amber-200 text-amber-800', error: 'bg-red-50 border-red-200 text-red-800' };
+      var el = document.createElement('div');
+      el.className = 'toast px-4 py-3 rounded-md border text-sm text-left min-w-[260px] shadow-lg ' + (colors[type] || colors.info);
+      el.role = 'alert';
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(function () { el.style.opacity = '0'; setTimeout(function () { el.remove(); }, 250); }, 4000);
+    };
+
+    window.apiFetch = async function (path, opts) {
+      opts = opts || {};
+      var headers = { 'Content-Type': 'application/json' };
+      if (opts.headers) Object.assign(headers, opts.headers);
+      var res = await fetch(path, Object.assign({}, opts, { headers: headers }));
+      if (!res.ok) {
+        var txt = await res.text().catch(function () { return ''; });
+        throw new Error('HTTP ' + res.status + (txt ? ': ' + window.escapeHtml(txt) : ''));
+      }
+      var ct = res.headers.get('content-type') || '';
+      if (ct.indexOf('application/json') !== -1) return await res.json();
+      return await res.text();
+    };
+  })();
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

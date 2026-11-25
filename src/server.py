@@ -31,8 +31,11 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import RedirectResponse
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from src.database import Database, VIDEO_STATES
@@ -62,6 +65,9 @@ async def verify_api_key(api_key: str | None = Depends(API_KEY_HEADER)) -> None:
 # Aplicação FastAPI
 # ---------------------------------------------------------------------------
 app = FastAPI(title="TikTok AI Autopilot — UI ao Vivo", version="1.0.0")
+
+templates = Jinja2Templates(directory="src/templates")
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
 
 # Orchestrator compartilhado (singleton). Database não mantém conexão persistente
 # (abre/fecha por transação), então é seguro reutilizar entre requisições.
@@ -259,7 +265,7 @@ class ConnectionManager:
                 "to_status": to_status,
                 "actor": actor,
                 "note": note,
-                "timestamp": datetime.now(timezone).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
 
@@ -332,145 +338,106 @@ async def agent_events_ws(websocket: WebSocket) -> None:
 # UI — visibilidade em tempo real dos agentes (/agents)
 # ---------------------------------------------------------------------------
 @app.get("/agents")
-def agents_ui() -> str:
-    """Página que exibe, em tempo real, o que cada agente está fazendo e dizendo."""
-    return Response(content="""<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TikTok AI Autopilot — Agentes em Tempo Real</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b0c10; color: #e8e8f0; }
-  .card { background: #12141d; border: 1px solid #2a2a3a; border-radius: 8px; }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-  .row-started { border-left: 3px solid #3b82f6; }
-  .row-completed { border-left: 3px solid #22c55e; }
-  .row-error { border-left: 3px solid #ef4444; }
-  .row-note { border-left: 3px solid #a855f7; }
-  .row-transition { border-left: 3px solid #f59e0b; }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-  .bg-started { background: #1e3a8a; color: #93c5fd; }
-  .bg-completed { background: #14532d; color: #bbf7d0; }
-  .bg-error { background: #7f1d1d; color: #fecaca; }
-  .bg-note { background: #5b21b6; color: #e9d5ff; }
-  .bg-transition { background: #713f12; color: #fcd34d; }
-  #log { scroll-behavior: smooth; }
-  .pulse::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 1.5s infinite; margin-right: 6px; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-</style>
-</head>
-<body class="min-h-screen p-4">
-<nav class="border-b border-[#2a2a3a] bg-[#0b0c10] shadow-sm mb-6">
-  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded bg-[#12141d] flex items-center justify-center">
-        <svg class="w-5 h-5 text-[#e8e8f0]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h1m5-3h1m-5-3h1M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-        </svg>
-      </div>
-      <div>
-        <h1 class="text-lg font-bold">TikTok AI Autopilot</h1>
-        <p class="text-xs text-[#6b7280]">Agentes em tempo real — o que cada agente está fazendo e dizendo</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-3">
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-[#6b7280]">Eventos:</span>
-        <span id="count" class="mono text-[#3b82f6]">0</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-[#6b7280]">Último seq:</span>
-        <span id="lastSeq" class="mono text-[#3b82f6]">-</span>
-      </div>
-      <a href="/" class="text-xs text-[#3b82f6] hover:underline">Voltar à API</a>
-    </div>
-  </div>
-</nav>
+def agents_ui() -> RedirectResponse:
+    """Redireciona a rota /agents para /ui/agents (template)."""
+    return RedirectResponse(url="/ui/agents", status_code=302)
 
-<main class="max-w-7xl mx-auto">
-  <div class="card p-4 mb-4">
-    <h2 class="font-semibold mb-2">Log de agentes (tempo real)</h2>
-    <p class="text-xs text-[#6b7280] mb-3">Conectado via WebSocket a <code class="mono text-[#3b82f6]">/api/agent-events/ws</code>. Cada linha é um evento emitido por um agente do grafo LangGraph.</p>
-    <div id="log" class="max-h-[70vh] overflow-y-auto border border-[#2a2a3a] rounded p-3 bg-[#0b0c10] space-y-2"></div>
-    <div class="mt-3 text-xs text-[#6b7280]">Sem eventos ainda. Execute o pipeline (ex.: <code class="mono">python main.py generate</code> ou via API) para ver os agentes em ação.</div>
-  </div>
-</main>
 
-<script>
-(function () {
-  var log = document.getElementById('log');
-  var countEl = document.getElementById('count');
-  var lastSeqEl = document.getElementById('lastSeq');
-  var count = 0;
-  var lastSeq = 0;
-  var wsUrl = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') +
-              '//' + window.location.host + '/api/agent-events/ws';
-  var token = new URLSearchParams(window.location.search).get('token');
-  if (token) { wsUrl += '?token=' + encodeURIComponent(token); }
-
-  var ws = new WebSocket(wsUrl);
-  var status = document.createElement('div');
-  status.className = 'text-xs text-[#6b7280] mb-2';
-  log.parentNode.insertBefore(status, log);
-
-  function htmlEscape(s) {
-    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-  function rowClass(action) {
-    var map = { started: 'row-started bg-started', completed: 'row-completed bg-completed',
-                error: 'row-error bg-error', note: 'row-note bg-note', transition: 'row-transition bg-transition' };
-    return map[action] || 'row-started';
-  }
-  function append(ev) {
-    count++;
-    lastSeq = ev.seq;
-    countEl.textContent = count;
-    lastSeqEl.textContent = lastSeq;
-    var cls = rowClass(ev.action);
-    var fieldsHtml = '';
-    if (ev.fields && Object.keys(ev.fields).length) {
-      fieldsHtml = ' <span class="text-[#6b7280] text-xs mono">[' +
-        Object.entries(ev.fields).map(function (kv) { return kv[0] + '=' + htmlEscape(String(kv[1])); }).join(', ') +
-        ']</span>';
-    }
-    var noteHtml = ev.note ? ' — <span class="text-[#cbd5e1]">' + htmlEscape(ev.note) + '</span>' : '';
-    var div = document.createElement('div');
-    div.className = 'p-2 mono text-xs border border-[#1f2330] rounded ' + cls;
-    div.innerHTML =
-      '<span class="text-[#94a3b8]">' + htmlEscape(ev.ts) + '</span> ' +
-      '<span class="text-[#e8e8f0] font-semibold">' + htmlEscape(ev.agent) + '</span> ' +
-      '<span class="badge ' + cls.replace('row-', 'bg-') + '">' + htmlEscape(ev.action) + '</span>' +
-      '<span class="text-[#6b7280] ml-2">stage=' + htmlEscape(ev.stage || '-') +
-      ' status=' + htmlEscape(ev.status || '-') + '</span>' +
-      fieldsHtml + noteHtml +
-      (ev.video_id ? ' <span class="text-[#6b7280] ml-2">vid=' + htmlEscape(ev.video_id) + '</span>' : '');
-    log.prepend(div);
-    var container = log.parentElement;
-    container.scrollTop = 0;
-  }
-
-  ws.onopen = function () { status.textContent = 'Conectado ao fluxo de eventos em tempo real.'; status.className = 'text-xs text-[#22c55e] mb-2 pulse'; };
-  ws.onclose = function () { status.textContent = 'Desconectado do fluxo de eventos.'; status.className = 'text-xs text-[#ef4444] mb-2'; };
-  ws.onerror = function () { status.textContent = 'Erro na conexão de eventos.'; status.className = 'text-xs text-[#ef4444] mb-2'; };
-  ws.onmessage = function (evt) {
-    try { append(JSON.parse(evt.data)); } catch (e) { console.error(e); }
-  };
-
-  // Carrega histórico inicial via REST.
-  fetch('/api/agent-events?limit=50')
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      (data.events || []).slice().reverse().forEach(append);
-      countEl.textContent = data.count || 0;
-      lastSeqEl.textContent = data.last_seq || '-';
+# ---------------------------------------------------------------------------
+# UI — páginas HTML (GET)
+# ---------------------------------------------------------------------------
+@app.get("/ui")
+def ui_index(request: Request) -> Any:
+    """Dashboard inicial: resumo por status, health check e métricas."""
+    orch = get_orchestrator()
+    by_status: dict[str, int] = {}
+    total = 0
+    for s in VIDEO_STATES:
+        rows = orch.list_by_status(s)
+        if rows:
+            by_status[s] = len(rows)
+            total += len(rows)
+    report = run_health_checks()
+    snap = metrics.snapshot()
+    return templates.TemplateResponse(request, "index.html", {
+        "stats": {"total": total, "by_status": by_status},
+        "health": report.to_dict(),
+        "metrics": {
+            "uptime_seconds": snap.get("uptime_seconds", 0),
+            "counters": snap.get("counters", {}),
+            "gauges": snap.get("gauges", {}),
+        },
     })
-    .catch(function () {});
-})();
-</script>
-</body>
-</html>""", media_type="text/html")
+
+
+@app.get("/ui/videos")
+def ui_videos(
+    request: Request,
+    status: str | None = Query(default=None, description="Filtrar por status"),
+    limit: int = Query(default=50, ge=1, le=500, description="Limite de resultados"),
+) -> Any:
+    """Lista vídeos, consumindo orch.list_by_status."""
+    orch = get_orchestrator()
+    statuses = list(VIDEO_STATES) if status is None else [status]
+    videos: list[dict[str, Any]] = []
+    for s in statuses:
+        rows = orch.list_by_status(s)
+        for r in rows[:limit]:
+            videos.append(VideoOut(r))
+    return templates.TemplateResponse(request, "videos.html", {
+        "videos": videos,
+        "VIDEO_STATES": VIDEO_STATES,
+        "status": status,
+        "limit": limit,
+    })
+
+
+@app.get("/ui/videos/{video_id}")
+def ui_video_detail(request: Request, video_id: str) -> Any:
+    """Detalhe de um vídeo, consumindo orch.db.get_video."""
+    orch = get_orchestrator()
+    row = orch.db.get_video(video_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Vídeo não encontrado: {video_id}")
+    return templates.TemplateResponse(request, "video_detail.html", {
+        "video": VideoDetail(row),
+    })
+
+
+@app.get("/ui/create")
+def ui_create_video(request: Request) -> Any:
+    """Página de criação de um novo vídeo."""
+    return templates.TemplateResponse(request, "create_video.html", {})
+
+
+@app.get("/ui/approve")
+def ui_approve_reject(request: Request) -> Any:
+    """Lista vídeos aguardando aprovação (AWAITING_APPROVAL)."""
+    orch = get_orchestrator()
+    rows = orch.list_by_status("AWAITING_APPROVAL")
+    videos = [VideoOut(r) for r in rows]
+    return templates.TemplateResponse(request, "approve_reject.html", {
+        "videos": videos,
+    })
+
+
+@app.get("/ui/metrics")
+def ui_metrics(request: Request) -> Any:
+    """Métricas operacionais, consumindo metrics.snapshot."""
+    snap = metrics.snapshot()
+    return templates.TemplateResponse(request, "metrics.html", {
+        "metrics": {
+            "uptime_seconds": snap.get("uptime_seconds", 0),
+            "counters": snap.get("counters", {}),
+            "gauges": snap.get("gauges", {}),
+        },
+    })
+
+
+@app.get("/ui/agents")
+def ui_agents(request: Request) -> Any:
+    """Visibilidade em tempo real dos agentes (template)."""
+    return templates.TemplateResponse(request, "agents.html", {})
 
 @app.get("/", dependencies=[Depends(verify_api_key)])
 def root() -> dict[str, Any]:
@@ -518,7 +485,7 @@ def generate_video(req: GenerateRequest) -> dict[str, Any]:
 
 
 @app.post("/api/videos/{video_id}/approve", dependencies=[Depends(verify_api_key)])
-def approve_video(video_id: str, req: ApproveRequest) -> dict[str, Any]:
+async def approve_video(video_id: str, req: ApproveRequest) -> dict[str, Any]:
     """Aprova um vídeo em AWAITING_APPROVAL (transição para APPROVED)."""
     orch = get_orchestrator()
     row = orch.db.get_video(video_id)
@@ -534,16 +501,9 @@ def approve_video(video_id: str, req: ApproveRequest) -> dict[str, Any]:
     except PipelineError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     # Notificar WebSocket
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    if loop is not None:
-        loop.create_task(
-            manager.send_status_changed(
-                video_id, row["status"], res.status, req.actor, "aprovado via UI"
-            )
-        )
+    await manager.send_status_changed(
+        video_id, row["status"], res.status, req.actor, "aprovado via UI"
+    )
     return {
         "video_id": video_id,
         "from_status": row["status"],
@@ -554,7 +514,7 @@ def approve_video(video_id: str, req: ApproveRequest) -> dict[str, Any]:
 
 
 @app.post("/api/videos/{video_id}/reject", dependencies=[Depends(verify_api_key)])
-def reject_video(video_id: str, req: RejectRequest) -> dict[str, Any]:
+async def reject_video(video_id: str, req: RejectRequest) -> dict[str, Any]:
     """Rejeita um vídeo e retoma o grafo (AWAITING_APPROVAL → ACTION_REQUIRED via LangGraph Command(resume=...))."""
     orch = get_orchestrator()
     row = orch.db.get_video(video_id)
@@ -569,17 +529,10 @@ def reject_video(video_id: str, req: RejectRequest) -> dict[str, Any]:
         res = orch.reject(video_id, actor=req.actor, motivo=req.motivo)
     except PipelineError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    # Notificar WebSocket
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    if loop is not None:
-        loop.create_task(
-            manager.send_status_changed(
-                video_id, row["status"], res.status, req.actor, f"rejeitado: {req.motivo}"
-            )
-        )
+    # Notificar WebSocket (endpoint assíncrono: await direto, sem get_running_loop)
+    await manager.send_status_changed(
+        video_id, row["status"], res.status, req.actor, f"rejeitado: {req.motivo}"
+    )
     return {
         "video_id": video_id,
         "from_status": row["status"],

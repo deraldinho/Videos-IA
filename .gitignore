@@ -20,3 +20,10 @@ __pycache__/
 # embedded/auxiliary (not part of project source)
 vendor/hyperframes/
 graphify-out/cache/
+
+# binários de imagem gerados/abaixados (não são parte do código-fonte)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp

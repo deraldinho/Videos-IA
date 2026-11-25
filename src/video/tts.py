@@ -163,25 +163,16 @@ class PiperTTS:
 
     @staticmethod
     def _write_silence(wav_path: Path, seconds: float = 1.0) -> None:
-        """Escreve um WAV de tom audível (fallback quando o TTS não está disponível).
+        """Escreve um WAV de silêncio real (fallback quando o TTS não está disponível).
 
-        Em vez de silêncio puro (que a ASR rejeitaria como "não audível"), gera um
-        tom senoide de 440 Hz de baixa amplitude. Isso permite que o pipeline
-        continue em modo DRY_RUN/REVIEW sem mascarar a ausência de TTS real como
-        narração genuína — o tom é claramente um placeholder de desenvolvimento.
+        Gera apenas zeros de PCM (silêncio), sem tom audível. Isso evita mascarar
+        a ausência de TTS real como narração genuína — o silêncio permanece
+        distinguível de áudio verdadeiro e não passa indevidamente em gates de
+        volume que exigem conteúdo real (AGENTS.md §9).
         """
-        import math
-
         sample_rate = 22050
         n_samples = int(sample_rate * seconds)
-        amplitude = 3000  # abaixo do clipping, mas audível para volumedetect
-        frames = b"".join(
-            struct.pack(
-                "<h",
-                int(amplitude * math.sin(2 * math.pi * 440 * (t / sample_rate))),
-            )
-            for t in range(n_samples)
-        )
+        frames = b"\x00\x00" * n_samples
         with wave.open(str(wav_path), "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
