@@ -437,6 +437,23 @@ class GraphOrchestrator:
         if decision not in {"approved", "rejected"}:
             raise PipelineError(f"Decisão inválida: {decision} (use 'approved' ou 'rejected')")
 
+        # Persiste a decisão humana no banco com uma transição adjacente válida
+        # (AWAITING_APPROVAL -> APPROVED ou -> ACTION_REQUIRED). Assim, ao
+        # chamar _graph_state_to_db após o grafo, o estado atual do banco já
+        # reflete a decisão humana e apenas etapas subsequentes adjacentes
+        # (ex.: APPROVED -> UPLOADING) são aplicadas, evitando históricos
+        # artificiais (Finding CR-02).
+        if decision == "approved":
+            self.db.transition(
+                video_id, "APPROVED", actor=actor,
+                note="aprovação humana: aprovado",
+            )
+        else:
+            self.db.transition(
+                video_id, "ACTION_REQUIRED", actor=actor,
+                note="aprovação humana: rejeitado",
+            )
+
         checkpointer = new_checkpointer(self._checkpoint_db)
         with checkpointer as cp:
             graph = build_graph(checkpointer=cp)

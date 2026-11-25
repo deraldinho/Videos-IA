@@ -35,7 +35,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Response, WebSocket,
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
-from src.database import ALLOWED_TRANSITIONS, Database, VIDEO_STATES
+from src.database import Database, VIDEO_STATES
 from src.errors import PipelineError
 from src.graph_orchestrator import GraphOrchestrator
 from src.health import run_health_checks
@@ -555,25 +555,21 @@ def approve_video(video_id: str, req: ApproveRequest) -> dict[str, Any]:
 
 @app.post("/api/videos/{video_id}/reject", dependencies=[Depends(verify_api_key)])
 def reject_video(video_id: str, req: RejectRequest) -> dict[str, Any]:
-    """Reprova um vídeo, transicionando para FAILED com motivo informado."""
+    """Rejeita um vídeo e retoma o grafo (AWAITING_APPROVAL → ACTION_REQUIRED via LangGraph Command(resume=...))."""
     orch = get_orchestrator()
     row = orch.db.get_video(video_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"Vídeo não encontrado: {video_id}")
-    allowed = ALLOWED_TRANSITIONS.get(row["status"], frozenset())
-    if "FAILED" not in allowed:
+    if row["status"] != "AWAITING_APPROVAL":
         raise HTTPException(
             status_code=409,
-            detail=f"Não é possível rejeitar {video_id} do estado {row['status']}",
+            detail=f"Vídeo {video_id} não está em AWAITING_APPROVAL (atual: {row['status']})",
         )
     try:
-        orch.db.record_error(
-            video_id, req.motivo, to_status="FAILED", actor=req.actor
-        )
+        res = orch.reject(video_id, actor=req.actor, motivo=req.motivo)
     except PipelineError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    import asyncio
-
+    # Notificar WebSocket
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -581,14 +577,15 @@ def reject_video(video_id: str, req: RejectRequest) -> dict[str, Any]:
     if loop is not None:
         loop.create_task(
             manager.send_status_changed(
-                video_id, row["status"], "FAILED", req.actor, f"rejeitado: {req.motivo}"
+                video_id, row["status"], res.status, req.actor, f"rejeitado: {req.motivo}"
             )
         )
     return {
         "video_id": video_id,
         "from_status": row["status"],
-        "to_status": "FAILED",
-        "motivo": req.motivo,
+        "to_status": res.status,
+        "changed": res.changed,
+        "note": res.note,
     }
 
 

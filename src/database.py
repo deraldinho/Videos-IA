@@ -317,6 +317,14 @@ class Database:
                         "Transição para PUBLISHED bloqueada: exige confirmação "
                         "remota verificável (cloudinary_id e/ou buffer_post_id)."
                     )
+                # Identificadores simulados (mock) nunca confirmam publicação real.
+                for campo in ("cloudinary_id", "buffer_post_id"):
+                    valor = fields.get(campo)
+                    if isinstance(valor, str) and valor.startswith("mock-"):
+                        raise PipelineError(
+                            f"Transição para PUBLISHED bloqueada: {campo} "
+                            "é um identificador simulado (mock), não confirmação remota real."
+                        )
 
             sets = ", ".join(f"{k} = ?" for k in fields)
             sql = f"UPDATE videos SET status = ?, updated_at = ?{', ' + sets if sets else ''} WHERE video_id = ?"

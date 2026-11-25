@@ -175,4 +175,42 @@ def test_scheduled_post_upsert_idempotent(tmp_path: Path) -> None:
     db.close()
 
 
+def test_publish_bloqueia_identificador_simulado(tmp_path: Path) -> None:
+    """PUBLISHED nunca deve ser atingido com cloudinary_id/buffer_post_id mock."""
+    db = Database(tmp_path / "test.sqlite3")
+    sm = StateMachine(db)
+    db.create_video(
+        video_id="v4",
+        execution_id="exec-4",
+        topic="t",
+        template="curiosidade",
+        kind="factual",
+        title="T",
+        description="D",
+        hashtags=[],
+        script_json={},
+        total_seconds=10.0,
+    )
+    # Leva ate PUBLISHING via transicoes permitidas (APPROVED -> UPLOADING ->
+    # UPLOADED -> QUEUED -> PUBLISHING).
+    for to in ("SCRIPT_READY", "RENDERING", "RENDERED", "VALIDATED",
+               "AWAITING_APPROVAL", "APPROVED", "UPLOADING", "UPLOADED",
+               "QUEUED", "PUBLISHING"):
+        sm.advance("v4", to)
+
+    # cloudinary_id mock -> nao deve permitir PUBLISHED.
+    with pytest.raises(PipelineError, match="simulado"):
+        sm.advance("v4", "PUBLISHED", cloudinary_id="mock-v4")
+
+    # buffer_post_id mock -> nao deve permitir PUBLISHED.
+    with pytest.raises(PipelineError, match="simulado"):
+        sm.advance("v4", "PUBLISHED", buffer_post_id="mock-buffer-v4")
+
+    # Identificador real (nao mock) permite a transicao.
+    sm.advance("v4", "PUBLISHED", cloudinary_id="cld-123", buffer_post_id="bp-456")
+    assert db.get_video("v4")["status"] == "PUBLISHED"
+
+    db.close()
+
+
 __all__ = []
