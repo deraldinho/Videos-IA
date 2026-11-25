@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Mapping, Optional
 
 from src.errors import PipelineError
-from src.logging import get_logger
+from src.app_logging import get_logger
 from src.settings import Settings, load_settings
 from src.video.renderer import HTMLRenderer
 

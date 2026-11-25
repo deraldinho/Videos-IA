@@ -34,7 +34,7 @@ from src.graph_orchestrator import GraphOrchestrator  # noqa: E402
 Orchestrator = GraphOrchestrator  # noqa: F811
 from src.scheduler import next_slot, valid_production_day  # noqa: E402
 from src.errors import PipelineError  # noqa: E402
-from src.logging import setup_logging, get_logger  # noqa: E402
+from src.app_logging import setup_logging, get_logger  # noqa: E402
 from src.health import run_health_checks  # noqa: E402
 from src.dashboard import generate_dashboard  # noqa: E402
 from src.metrics import metrics, increment_tick, observe_duration  # noqa: E402

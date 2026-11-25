@@ -10,7 +10,7 @@ import pytest
 from langgraph.types import Command
 from src.workflow.graph import build_graph, new_checkpointer
 from src.workflow.state import ApprovalStatus, Stage, empty_state, state_to_dict, dict_to_state
-from src.logging import setup_logging
+from src.app_logging import setup_logging
 from src.metrics import metrics
 
 

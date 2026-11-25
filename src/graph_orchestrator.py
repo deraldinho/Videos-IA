@@ -224,6 +224,8 @@ class GraphOrchestrator:
             fields["buffer_post_id"] = state["buffer_post_id"]
         if state.get("buffer_post_state"):
             fields["buffer_post_state"] = state["buffer_post_state"]
+        if state.get("error_message"):
+            fields["error_message"] = state["error_message"]
 
         note = state.get("note", "")
 
@@ -249,23 +251,52 @@ class GraphOrchestrator:
                 )
             return
 
-        # Apenas transicoes validas e diretas (adjacentes) a partir do estado
-        # atual sao aplicadas. Nao recriamos caminhos artificiais (BFS) que
-        # pulem estados intermediarios nunca percorridos pelo grafo, pois isso
-        # gravaria historico de estados que o video nunca realmente atingiu
-        # (Finding CR-02: transicoes artificiais no SQLite).
+        # Avança pelo caminho linear de estados (DB_STATE_ORDER) até atingir o
+        # destino reportado pelo grafo. O grafo LangGraph pode pular estados
+        # intermediários (ex.: IDEA_CREATED -> AWAITING_APPROVAL em uma única
+        # execução), mas o banco só aceita transições adjacentes. Cada estado
+        # intermediário corresponde a um estágio real percorrido pelo grafo
+        # (supervisor roteia na ordem STAGE_ORDER), portanto recriar o caminho
+        # linear não inventa históricos — apenas os materializa no banco.
+        if current != db_status and db_status in _DB_STATE_ORDER:
+            path = _DB_STATE_ORDER
+            try:
+                idx_current = path.index(current)
+                idx_target = path.index(db_status)
+            except ValueError:
+                idx_current = idx_target = -1
+            if idx_current >= 0 and idx_target > idx_current:
+                # Valida que cada etapa do caminho é uma transição adjacente
+                # permitida pelo state machine do banco (não aceita atalhos).
+                for step in range(idx_current + 1, idx_target + 1):
+                    src = path[step - 1]
+                    dst = path[step]
+                    allowed = ALLOWED_TRANSITIONS.get(src, frozenset())
+                    if dst not in allowed:
+                        # Caminho interrompido: persiste campos adicionais no
+                        # estado atual e para aqui.
+                        self.db.transition(
+                            video_id, current, actor="system", note=note, **fields
+                        )
+                        return
+                    self.db.transition(
+                        video_id, dst, actor="system", note=note, **fields
+                    )
+                    current = dst
+                return
+
+        # Transicao direta valida (caso padrão quando origem e destino são
+        # adjacentes ou já iguais).
         allowed = ALLOWED_TRANSITIONS.get(current, frozenset())
-        if db_status not in allowed:
-            # Destino nao e uma transicao direta valida a partir de current:
-            # nao altera o status, apenas persiste campos adicionais se houver.
+        if db_status not in allowed and current != db_status:
+            # Destino não é uma transição direta válida a partir de current:
+            # não altera o status, apenas persiste campos adicionais se houver.
             if fields:
                 self.db.transition(
                     video_id, current, actor="system", note=note, **fields
                 )
             return
 
-        # Transicao direta valida: aplica uma etapa unica, respeitando o state
-        # machine do banco (sem estados artificiais intermediarios).
         self.db.transition(
             video_id, db_status, actor="system", note=note, **fields
         )
@@ -428,6 +459,7 @@ class GraphOrchestrator:
         *,
         decision: str,
         actor: str = "operador",
+        note: Optional[str] = None,
     ) -> GraphExecutionResult:
         """Retoma o grafo após aprovação/rejeição humana (Command(resume=...))."""
         row = self.db.get_video(video_id)
@@ -446,12 +478,12 @@ class GraphOrchestrator:
         if decision == "approved":
             self.db.transition(
                 video_id, "APPROVED", actor=actor,
-                note="aprovação humana: aprovado",
+                note=note or "aprovação humana: aprovado",
             )
         else:
             self.db.transition(
                 video_id, "ACTION_REQUIRED", actor=actor,
-                note="aprovação humana: rejeitado",
+                note=note or "aprovação humana: rejeitado",
             )
 
         checkpointer = new_checkpointer(self._checkpoint_db)
@@ -496,7 +528,7 @@ class GraphOrchestrator:
     ) -> GraphExecutionResult:
         """Rejeita um vídeo e retoma o grafo."""
         note = motivo or "rejeitado via CLI"
-        return self.resume_after_approval(video_id, decision="rejected", actor=actor)
+        return self.resume_after_approval(video_id, decision="rejected", actor=actor, note=note)
 
     def status(self, video_id: str) -> Optional[dict[str, Any]]:
         row = self.db.get_video(video_id)

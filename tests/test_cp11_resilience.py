@@ -11,7 +11,7 @@ import pytest
 from src.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError, CircuitState
 from src.dashboard import generate_dashboard
 from src.health import HealthReport, run_health_checks
-from src.logging import JsonFormatter, setup_logging, get_logger
+from src.app_logging import JsonFormatter, setup_logging, get_logger
 from src.metrics import metrics, increment_video_status, increment_agent_run, add_cost, observe_duration
 from src.retry import retry_call
 
