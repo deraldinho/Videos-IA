@@ -9,7 +9,7 @@
       <h1 class="text-2xl font-bold text-gray-900">Detalhe do vídeo</h1>
       <p class="text-gray-600">Todos os campos e ações disponíveis para este vídeo.</p>
     </div>
-    <a href="/videos" class="text-sm font-medium text-red-600 hover:underline flex items-center gap-2">
+    <a href="/ui/videos" class="text-sm font-medium text-red-600 hover:underline flex items-center gap-2">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
       Voltar à lista
     </a>
@@ -82,6 +82,10 @@
         <div>
           <dt class="text-xs font-semibold text-gray-500 uppercase">Tentativas (retry)</dt>
           <dd class="text-gray-700" id="d-retry-count"></dd>
+        </div>
+        <div class="col-span-2">
+          <dt class="text-xs font-semibold text-gray-500 uppercase">Assistir vídeo</dt>
+          <dd id="d-video-player" class="space-y-3"></dd>
         </div>
         <div class="col-span-2">
           <dt class="text-xs font-semibold text-gray-500 uppercase">Caminho MP4 local</dt>
@@ -198,11 +202,21 @@
 
       document.getElementById('d-status-badge').innerHTML = badge(v.status);
 
-      // MP4
+      // MP4 player
+      const playerEl = document.getElementById('d-video-player');
       const mp4El = document.getElementById('d-mp4');
       if (v.mp4_path) {
+        // Extrai o nome do arquivo do caminho (Windows ou Unix) e monta a URL pública.
+        const nomeArquivo = v.mp4_path.replace(/\\/g, '/').split('/').pop();
+        const urlVideo = '/renders/' + nomeArquivo;
+        playerEl.innerHTML =
+          '<video controls preload="metadata" class="w-full max-w-md rounded-lg border border-gray-200 shadow-sm bg-gray-100" poster="">' +
+          '<source src="' + window.escapeHtml(urlVideo) + '" type="video/mp4">' +
+          'Seu navegador nao suporta o player de video.' +
+          '</video>';
         mp4El.innerHTML = linkOrDash(v.mp4_path, 'Abrir MP4');
       } else {
+        playerEl.innerHTML = '<span class="text-gray-400">Nenhum v�deo renderizado dispon�vel.</span>';
         mp4El.innerHTML = '<span class="text-gray-400">-</span>';
       }
       // Cloudinary
@@ -235,7 +249,7 @@
       } else if (v.status === 'FAILED') {
         html += '<button onclick="retryVideo()" class="px-4 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition shadow-sm">Retry (limpar erro)</button>';
       }
-      html += '<a href="/videos" class="px-4 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Voltar à lista</a>';
+      html += '<a href="/ui/videos" class="px-4 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Voltar à lista</a>';
       actions.innerHTML = html;
     } catch (e) {
       loader.hidden = true;

@@ -68,6 +68,8 @@ app = FastAPI(title="TikTok AI Autopilot — UI ao Vivo", version="1.0.0")
 
 templates = Jinja2Templates(directory="src/templates")
 app.mount("/static", StaticFiles(directory="src/static"), name="static")
+# Serve os MP4 renderizados para que o usuario possa assistir direto no site.
+app.mount("/renders", StaticFiles(directory="output/drafts/renders"), name="renders")
 
 # Orchestrator compartilhado (singleton). Database não mantém conexão persistente
 # (abre/fecha por transação), então é seguro reutilizar entre requisições.
