@@ -10,6 +10,9 @@ jobs:
   build-and-test:
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      SystemRoot: C:\Windows
+      ComSpec: C:\Windows\System32\cmd.exe
 
     steps:
       - name: Checkout do repositório
@@ -62,13 +65,6 @@ jobs:
           Get-ChildItem -Recurse -Filter *.py -Path src | ForEach-Object { python -m py_compile $_.FullName }
           python -m py_compile main.py
           python -c "import src; print('src version:', src.__version__)"
-
-      - name: Garantir variáveis de ambiente do Windows (SystemRoot, ComSpec)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          [Environment]::SetEnvironmentVariable("SystemRoot", "C:\Windows", [EnvironmentVariableTarget]::Process)
-          [Environment]::SetEnvironmentVariable("ComSpec", "C:\Windows\System32\cmd.exe", [EnvironmentVariableTarget]::Process)
 
       - name: Executar suíte pytest isolada (sem APIs externas)
         run: |
