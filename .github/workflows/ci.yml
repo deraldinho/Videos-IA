@@ -37,11 +37,18 @@ jobs:
             if ($exe) {
               $dir = $exe.DirectoryName
               [Environment]::SetEnvironmentVariable("PATH", "$dir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Process)", [EnvironmentVariableTarget]::Process)
+              [Environment]::SetEnvironmentVariable("PATH", "$dir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Machine)", [EnvironmentVariableTarget]::Machine)
               Write-Host "FFmpeg encontrado em: $dir"
             } else {
               Write-Host "FFmpeg não encontrado após download direto"
               exit 1
             }
+          } else {
+            $ffmpegPath = (Get-Command ffmpeg).Source
+            $ffmpegDir = Split-Path -Parent $ffmpegPath
+            [Environment]::SetEnvironmentVariable("PATH", "$ffmpegDir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Process)", [EnvironmentVariableTarget]::Process)
+            [Environment]::SetEnvironmentVariable("PATH", "$ffmpegDir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Machine)", [EnvironmentVariableTarget]::Machine)
+            Write-Host "FFmpeg já instalado em: $ffmpegDir"
           }
 
       - name: Instalar dependências Python
@@ -50,8 +57,10 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Validar sintaxe e importação dos módulos
+        shell: pwsh
         run: |
-          python -m py_compile src/**/*.py main.py
+          Get-ChildItem -Recurse -Filter *.py -Path src | ForEach-Object { python -m py_compile $_.FullName }
+          python -m py_compile main.py
           python -c "import src; print('src version:', src.__version__)"
 
       - name: Executar suíte pytest isolada (sem APIs externas)
