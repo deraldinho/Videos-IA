@@ -29,30 +29,36 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Continue"
-          winget install ffmpeg -s winget --accept-package-agreements --accept-source-agreements -h 2>$null
-          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-            Write-Host "winget falhou; tentando download direto do ffmpeg"
-            $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2024-01-13-12-33/ffmpeg-master-latest-win64-gpl.zip"
-            $zip = "$env:TEMP\ffmpeg.zip"
-            Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 120
-            Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ffmpeg"
-            $exe = Get-ChildItem -Path "$env:TEMP\ffmpeg" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
-            if ($exe) {
-              $dir = $exe.DirectoryName
-              [Environment]::SetEnvironmentVariable("PATH", "$dir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Process)", [EnvironmentVariableTarget]::Process)
-              [Environment]::SetEnvironmentVariable("PATH", "$dir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Machine)", [EnvironmentVariableTarget]::Machine)
-              Write-Host "FFmpeg encontrado em: $dir"
-            } else {
-              Write-Host "FFmpeg não encontrado após download direto"
+          $ffmpegDir = "$env:RUNNER_TEMP\ffmpeg-bin"
+          $ffmpegExe = "$ffmpegDir\bin\ffmpeg.exe"
+          if (-not (Test-Path $ffmpegExe)) {
+            Write-Host "Baixando ffmpeg estático (GyanD build)"
+            $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+            $zip = "$env:RUNNER_TEMP\ffmpeg.zip"
+            Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 300
+            Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\ffmpeg-download"
+            $extractedDir = Get-ChildItem -Path "$env:RUNNER_TEMP\ffmpeg-download" -Filter "ffmpeg-*" -Directory | Select-Object -First 1
+            if (-not $extractedDir) {
+              Write-Host "Não foi possível localizar diretório extraído do ffmpeg"
               exit 1
             }
-          } else {
-            $ffmpegPath = (Get-Command ffmpeg).Source
-            $ffmpegDir = Split-Path -Parent $ffmpegPath
-            [Environment]::SetEnvironmentVariable("PATH", "$ffmpegDir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Process)", [EnvironmentVariableTarget]::Process)
-            [Environment]::SetEnvironmentVariable("PATH", "$ffmpegDir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Machine)", [EnvironmentVariableTarget]::Machine)
-            Write-Host "FFmpeg já instalado em: $ffmpegDir"
+            New-Item -ItemType Directory -Path $ffmpegDir -Force | Out-Null
+            Move-Item -Path "$($extractedDir.FullName)\*" -Destination $ffmpegDir -Force
+            Remove-Item -Path "$env:RUNNER_TEMP\ffmpeg-download" -Recurse -Force
+            Remove-Item -Path $zip -Force
           }
+          if (-not (Test-Path $ffmpegExe)) {
+            Write-Host "ffmpeg.exe não encontrado em $ffmpegExe"
+            exit 1
+          }
+          # Persistir PATH entre steps do GitHub Actions via GITHUB_ENV
+          $currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Process)
+          $newPath = "$($ffmpegDir)\bin;$currentPath"
+          [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Process)
+          echo "PATH=$newPath" >> $env:GITHUB_ENV
+          echo "FFMPEG_DIR=$ffmpegDir" >> $env:GITHUB_ENV
+          Write-Host "FFmpeg instalado em: $ffmpegDir\bin"
+          Write-Host "Versão: $(Get-Command ffmpeg | Select-Object -ExpandProperty Source)"
 
       - name: Instalar dependências Python
         run: |
