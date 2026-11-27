@@ -25,7 +25,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from langgraph.checkpoint.sqlite import SqliteSaver
+try:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+except ModuleNotFoundError:  # pragma: no cover - fallback para ambientes sem SQLite checkpointer
+    try:
+        from langgraph.checkpoint.memory import MemorySaver as SqliteSaver
+    except ModuleNotFoundError:  # pragma: no cover
+
+        class SqliteSaver:  # type: ignore[no-redef]
+            """Fallback defensivo quando nenhum checkpointer persistente está disponível."""
+
+            @classmethod
+            def from_conn_string(cls, *args, **kwargs):  # type: ignore[no-untyped-def]
+                raise RuntimeError(
+                    "Nenhum checkpointer persistente disponível: instale "
+                    "langgraph-checkpoint-sqlite (ou use MemorySaver diretamente)."
+                )
 from langgraph.types import Command
 
 from src.database import ALLOWED_TRANSITIONS, Database, VIDEO_STATES

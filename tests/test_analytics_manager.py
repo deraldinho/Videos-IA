@@ -172,7 +172,7 @@ def test_manager_consolidate_somente_targets_publicaveis():
 def test_manager_consolidate_invalido_ignorado_sem_parar():
     manager = AnalyticsManager(providers=[MockAnalyticsProvider()])
     state: dict = {
-        "publication_targets": [{"nao_eh": "um target valido"}],
+        "publication_targets": ["nao_eh_um_dicionario_valido"],
         "metric_snapshots": [],
     }
     out = manager.consolidate(state)
