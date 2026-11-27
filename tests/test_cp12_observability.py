@@ -50,7 +50,7 @@ def test_workflow_state_round_trip_with_new_fields():
 # --------------------------------------------------------------------------- #
 # Grafo completo com todos os 12 agentes (revisão final CP05-CP10)            #
 # --------------------------------------------------------------------------- #
-def test_graph_full_pipeline_reaches_monitored_and_audit(tmp_path):
+def test_graph_full_pipeline_reaches_monitored_and_audit(tmp_path, monkeypatch):
     """Executa o grafo completo com MP4 real e verifica que chega ao fim."""
     import subprocess
 
@@ -58,7 +58,7 @@ def test_graph_full_pipeline_reaches_monitored_and_audit(tmp_path):
         subprocess.run(
             [
                 "ffmpeg", "-y",
-                "-f", "lavfi", "-i", "color=c=red:s=1080x1920:r=30:d=2",
+                "-f", "lavfi", "-i", "mandelbrot=size=1080x1920:rate=30",
                 "-f", "lavfi", "-i", "sine=frequency=440:d=2",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
                 "-c:a", "aac", "-shortest",
@@ -70,6 +70,21 @@ def test_graph_full_pipeline_reaches_monitored_and_audit(tmp_path):
 
     mp4 = tmp_path / "valido.mp4"
     _make_mp4(mp4)
+
+    # Mock do HTMLRenderer para não depender de Chromium/Puppeteer (não instalado
+    # neste ambiente). O teste valida a orquestração do grafo, não a render externa.
+    import src.video.renderer as renderer_mod
+
+    class _FakeRenderer:
+        def render(self, *args, **kwargs):
+            out = Path(kwargs.get("output_name", "fake.mp4"))
+            out.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+
+            shutil.copy(str(mp4), str(out))
+            return out
+
+    monkeypatch.setattr(renderer_mod, "HTMLRenderer", lambda *a, **k: _FakeRenderer())
 
     db_path = tmp_path / "checkpoints.sqlite3"
     with new_checkpointer(str(db_path)) as checkpointer:

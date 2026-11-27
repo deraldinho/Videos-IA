@@ -2,6 +2,7 @@
 
 Comandos:
   python main.py generate          # cria vídeo + roteiro (modo assisted/NVIDIA)
+  python main.py produzir-local <roteiro.json>  # exporta um MP4 local para revisão
   python main.py review            # lista vídeos aguardando aprovação
   python main.py approve <id>      # aprova um vídeo para publicação
   python main.py schedule          # calcula próximos slots de publicação
@@ -27,7 +28,10 @@ if str(ROOT) not in sys.path:
 
 from src.settings import load_settings, require_cloudinary_credentials, require_buffer_credentials  # noqa: E402
 from src.database import VIDEO_STATES  # noqa: E402
-from src.orchestrator import Orchestrator, STAGE_ORDER  # noqa: E402
+from src.graph_orchestrator import GraphOrchestrator  # noqa: E402
+
+# Alias de compatibilidade: testes e entry points antigos referenciam Orchestrator.
+Orchestrator = GraphOrchestrator  # noqa: F811
 from src.scheduler import next_slot, valid_production_day  # noqa: E402
 from src.errors import PipelineError  # noqa: E402
 from src.logging import setup_logging, get_logger  # noqa: E402
@@ -53,6 +57,16 @@ def _build_parser() -> argparse.ArgumentParser:
     g.add_argument("--template", choices=["curiosidade", "lista", "historia", "explicacao"], help="Template.")
     g.add_argument("--target-seconds", type=int, help="Duração alvo em segundos.")
     g.add_argument("--execution-id", help="ID de execução (para retomada idempotente).")
+
+    local = sub.add_parser("produzir-local", help="Gera um MP4 para revisão, sem acessar a fila.")
+    local.add_argument("roteiro", type=Path, help="Roteiro JSON validável pelo projeto.")
+    local.add_argument("--saida", type=Path, default=ROOT / "output" / "artcraft-local",
+                       help="Pasta que receberá um novo diretório de rascunho.")
+    local.add_argument("--piper-model", type=Path, default=ROOT / "models" / "pt_BR-faber-medium.onnx",
+                       help="Modelo de voz Piper (por padrão, pt_BR-faber-medium.onnx do projeto).")
+    local.add_argument("--piper-bin", help="Executável do Piper (opcional).")
+    local.add_argument("--effectcraft-bin", help="Executável da CLI do EffectCraft (opcional).")
+    local.add_argument("--filmcraft-bin", help="Executável da CLI do FilmCraft (opcional).")
 
     # review
     sub.add_parser("review", help="Lista vídeos aguardando aprovação (AWAITING_APPROVAL).")
@@ -84,10 +98,15 @@ def _build_parser() -> argparse.ArgumentParser:
     # metrics
     sub.add_parser("metrics", help="Mostra métricas operacionais coletadas em memória.")
 
+    # serve — inicia o servidor web da UI ao vivo (FastAPI + Uvicorn)
+    sv = sub.add_parser("serve", help="Inicia o servidor web da UI ao vivo.")
+    sv.add_argument("--host", default="127.0.0.1", help="Host do servidor (padrão: 127.0.0.1)")
+    sv.add_argument("--port", type=int, default=8000, help="Porta do servidor (padrão: 8000)")
+
     return p
 
 
-def cmd_generate(orch: Orchestrator, args: argparse.Namespace) -> int:
+def cmd_generate(orch: GraphOrchestrator, args: argparse.Namespace) -> int:
     try:
         res = orch.generate(
             topic=args.topic,
@@ -118,7 +137,7 @@ def cmd_review(orch: Orchestrator, _: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_approve(orch: Orchestrator, args: argparse.Namespace) -> int:
+def cmd_approve(orch: GraphOrchestrator, args: argparse.Namespace) -> int:
     settings = orch.settings
     if settings.mode == "REVIEW" and not settings.live_enabled:
         print("Aviso: modo REVIEW com live_enabled=false — aprovação registrada, mas sem publicação real.")
@@ -130,13 +149,12 @@ def cmd_approve(orch: Orchestrator, args: argparse.Namespace) -> int:
         print(f"ERRO: vídeo {args.video_id} não está em AWAITING_APPROVAL (atual: {row['status']}).")
         return 1
     try:
-        res = orch.sm.advance(args.video_id, "APPROVED", actor="operador",
-                              note="aprovado via CLI")
+        res = orch.approve(args.video_id)
     except PipelineError as exc:
         print(f"ERRO: {exc}")
         return 1
     print(f"Vídeo {args.video_id} aprovado (APPROVED).")
-    print(f"Transição: {res.from_status} -> {res.to_status}")
+    print(f"Status: {res.status} | Nota: {res.note}")
     return 0
 
 
@@ -189,9 +207,14 @@ def cmd_status(orch: Orchestrator, args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run_daily(orch: Orchestrator, _: argparse.Namespace) -> int:
-    """Executa o pipeline diário: processa vídeos em AWAITING_APPROVAL (se AUTO)
-    e avança os que estão em estágios anteriores."""
+def cmd_run_daily(orch: GraphOrchestrator, _: argparse.Namespace) -> int:
+    """Executa o pipeline diário: roda o grafo LangGraph para cada vídeo pendente.
+
+    Cada chamada a ``orch.run_pipeline`` avança o grafo a partir do estado
+    persistido no banco (respeitando aprovação humana, compliance e modo
+    DRY_RUN/REVIEW/AUTO). Vídeos que pararem em AWAITING_APPROVAL aguardam
+    decisão humana (via ``approve``/``reject``) antes de continuar.
+    """
     settings = orch.settings
     publication = settings.publication
     if settings.mode == "AUTO" and not settings.auto_enabled:
@@ -205,46 +228,33 @@ def cmd_run_daily(orch: Orchestrator, _: argparse.Namespace) -> int:
         print("Hoje não é dia de produção. Nenhuma ação executada.")
         return 0
 
-    # Avança vídeos pendentes em estágios iniciais (até APPROVED se AUTO).
-    pending = orch.list_by_status("SCRIPT_READY") + orch.list_by_status("RENDERING") + \
-              orch.list_by_status("RENDERED") + orch.list_by_status("VALIDATED")
+    # Vídeos pendentes em estágios iniciais, aprovados ou já enviados.
+    pending = (
+        orch.list_by_status("SCRIPT_READY")
+        + orch.list_by_status("RENDERING")
+        + orch.list_by_status("RENDERED")
+        + orch.list_by_status("VALIDATED")
+        + orch.list_by_status("AWAITING_APPROVAL")
+        + orch.list_by_status("APPROVED")
+        + orch.list_by_status("UPLOADED")
+        + orch.list_by_status("QUEUED")
+    )
     for row in pending:
         vid = row["video_id"]
-        current = row["status"]
         try:
-            if current == "SCRIPT_READY":
-                orch.run_stage(vid, "tts")
-            elif current == "RENDERING":
-                orch.run_stage(vid, "render")
-            elif current == "RENDERED":
-                orch.run_stage(vid, "validate")
-            elif current == "VALIDATED":
-                if settings.mode == "AUTO":
-                    # Passa para AWAITING_APPROVAL então APPROVED automaticamente
-                    orch.sm.advance(vid, "AWAITING_APPROVAL", actor="system", note="validado")
-                    if settings.auto_enabled:
-                        orch.sm.advance(vid, "APPROVED", actor="system", note="aprovado automático (AUTO)")
-                else:
-                    orch.sm.advance(vid, "AWAITING_APPROVAL", actor="system", note="validado, aguardando aprovação")
+            res = orch.run_pipeline(vid)
+            if res.interrupted:
+                print(f"{vid}: interrompido para aprovação humana ({res.status}).")
+            else:
+                print(f"{vid}: avançado para {res.status} ({res.note}).")
         except PipelineError as exc:
             print(f"Aviso: não foi possível avançar {vid}: {exc}")
-
-    # Se AUTO, também publica os APPROVED que ainda não foram para o Cloudinary.
-    if settings.mode == "AUTO" and settings.auto_enabled:
-        approved = orch.list_by_status("APPROVED")
-        for row in approved:
-            vid = row["video_id"]
-            try:
-                orch.run_stage(vid, "upload")
-                orch.run_stage(vid, "publish")
-            except PipelineError as exc:
-                print(f"Aviso: não foi publicar {vid}: {exc}")
 
     print("Run-daily concluído.")
     return 0
 
 
-def cmd_tick(orch: Orchestrator, _: argparse.Namespace) -> int:
+def cmd_tick(orch: GraphOrchestrator, _: argparse.Namespace) -> int:
     """Tick do agendador: executa o pipeline diário com métricas e health checks.
 
     Executa o mesmo que run-daily, mas com:
@@ -316,6 +326,32 @@ def cmd_metrics(_: Orchestrator, __: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(_: Orchestrator, args: argparse.Namespace) -> int:
+    """Inicia o servidor web da UI ao vivo (FastAPI + Uvicorn)."""
+    import uvicorn
+
+    print(f"Iniciando UI ao vivo em http://{args.host}:{args.port}")
+    print(f"Docs disponíveis em http://{args.host}:{args.port}/docs")
+    uvicorn.run("src.server:app", host=args.host, port=args.port)
+    return 0
+
+
+def cmd_produzir_local(args: argparse.Namespace) -> int:
+    from src.video.producao_local import produzir_local
+
+    try:
+        info = produzir_local(args.roteiro, saida=args.saida, piper_model=args.piper_model,
+                              piper_bin=args.piper_bin, effectcraft_bin=args.effectcraft_bin,
+                              filmcraft_bin=args.filmcraft_bin)
+    except (PipelineError, OSError, OverflowError) as exc:
+        print(f"ERRO: {exc}", file=sys.stderr)
+        return 1
+    print(f"MP4 validado para revisão: {info.path}")
+    print(f"{info.width}×{info.height} | {info.fps:g} fps | {info.duration_seconds:.2f}s | "
+          f"{info.size_bytes / 1024**2:.2f} MiB")
+    return 0
+
+
 COMMANDS = {
     "generate": cmd_generate,
     "review": cmd_review,
@@ -327,12 +363,16 @@ COMMANDS = {
     "health": cmd_health,
     "dashboard": cmd_dashboard,
     "metrics": cmd_metrics,
+    "serve": cmd_serve,
 }
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    # A produção local não abre o banco, nem consulta configurações de publicação.
+    if args.command == "produzir-local":
+        return cmd_produzir_local(args)
     orch = Orchestrator()
     try:
         return COMMANDS[args.command](orch, args)

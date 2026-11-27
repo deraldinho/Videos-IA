@@ -1,0 +1,55 @@
+{
+  "topic": "Farol imaginário no céu",
+  "template": "historia",
+  "kind": "ficcao",
+  "title": "O farol das nuvens",
+  "description": "Uma história fictícia sobre a luz que revelou um caminho no céu.",
+  "hashtags": ["#Ficcao", "#Historia", "#Farol"],
+  "scenes": [
+    {
+      "role": "gancho",
+      "seconds": 3,
+      "heading": "Uma luz no céu",
+      "narration": ["Luz no céu!"]
+    },
+    {
+      "role": "corpo",
+      "seconds": 8,
+      "heading": "Um farol sem porteiro",
+      "narration": [
+        "Naquela vila, todos fechavam as janelas ao anoitecer.",
+        "Mas uma luz verde atravessava as cortinas.",
+        "Ela vinha de um farol suspenso entre as nuvens."
+      ]
+    },
+    {
+      "role": "corpo",
+      "seconds": 9,
+      "heading": "Uma ponte de névoa",
+      "narration": [
+        "Certa noite, a luz parou de girar.",
+        "O feixe tocou a praça e desenhou uma escada na névoa.",
+        "Os degraus surgiam só onde a luz passava."
+      ]
+    },
+    {
+      "role": "corpo",
+      "seconds": 9,
+      "heading": "O outro lado",
+      "narration": [
+        "Uma viajante subiu antes que o feixe se apagasse.",
+        "Lá em cima, não encontrou o mar.",
+        "Encontrou outra vila, acendendo as próprias janelas."
+      ]
+    },
+    {
+      "role": "cta",
+      "seconds": 5,
+      "heading": "Você subiria?",
+      "narration": [
+        "A escada ainda está lá, toda noite.",
+        "Você subiria para ver o outro lado?"
+      ]
+    }
+  ]
+}

@@ -157,8 +157,21 @@ def test_upload_advances_through_uploading_then_uploaded(tmp_path):
 # --------------------------------------------------------------------------- #
 # P0-3: run_pipeline(up_to=) usa indice numerico (nao alfabetico)             #
 # --------------------------------------------------------------------------- #
-def test_run_pipeline_up_to_stops_at_numeric_index(tmp_path):
+def test_run_pipeline_up_to_stops_at_numeric_index(tmp_path, monkeypatch):
     from src.orchestrator import Orchestrator  # noqa: PLC0415
+    from src.video.hyperframes_adapter import HyperFramesAdapter
+
+    monkeypatch.chdir(tmp_path)
+    chamadas_render = []
+
+    def render_simulado(self, template, context, duration_seconds, *, output_name, audio_wav):
+        assert context["video_id"] == "v1" and audio_wav.is_file()
+        chamadas_render.append(output_name)
+        mp4 = tmp_path / output_name
+        mp4.write_bytes(b"MP4 simulado")
+        return mp4
+
+    monkeypatch.setattr(HyperFramesAdapter, "render", render_simulado)
     settings = _tmp_settings(tmp_path)
     db_path = tmp_path / "v.sqlite3"
     orch = Orchestrator(settings=settings, db_path=db_path)
@@ -187,6 +200,7 @@ def test_run_pipeline_up_to_stops_at_numeric_index(tmp_path):
         assert "script" in statuses
         assert "tts" in statuses
         assert "render" not in statuses
+        assert chamadas_render == []
         assert orch.db.get_video("v1")["status"] == "RENDERING"
 
         # Ate "render" nao deve pular para validate.
@@ -195,6 +209,7 @@ def test_run_pipeline_up_to_stops_at_numeric_index(tmp_path):
         try:
             res = orch2.run_stage("v1", "render")
             assert res.status == "RENDERED"
+            assert chamadas_render == ["v1.mp4"]
         finally:
             orch2.close()
     finally:

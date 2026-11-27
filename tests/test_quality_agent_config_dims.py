@@ -71,7 +71,7 @@ def test_quality_agent_passa_dimensoes_personalizadas(
     assert kwargs["height"] == 1280
     assert kwargs["fps"] == 24.0
     assert kwargs["require_audio"] is True
-    assert kwargs["strict"] is False  # quality_agent do grafo permanece permissivo (baseline)
+    assert kwargs["strict"] is True  # quality_agent do grafo valida com strict=True (CP26)
 
 
 # --------------------------------------------------------------------------- #

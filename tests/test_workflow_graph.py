@@ -40,13 +40,20 @@ from src.workflow.state import (
 
 
 def _make_mp4(path: Path) -> None:
-    """Gera um MP4 válido (1080x1920, 30fps, com áudio audível)."""
+    """Gera um MP4 válido (1080x1920, 30fps, com áudio audível e variação visual).
+
+    Usa ``mandelbrot`` (fractal animado, variação perceptível entre frames)
+    em vez de padrões estáticos (testsrc/smptebars) para não disparar o
+    quality gate de cena estática (pHash) em strict=True. Inclui stream de áudio
+    para atender require_audio.
+    """
     subprocess.run(
         [
             "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "color=c=red:s=1080x1920:r=30:d=2",
+            "-f", "lavfi", "-i", "mandelbrot=size=1080x1920:rate=30",
             "-f", "lavfi", "-i", "sine=frequency=440:d=2",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+            "-t", "2", "-r", "30",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-shortest",
             str(path),
         ],
@@ -280,8 +287,26 @@ def test_visual_agent_creates_storyboard():
     assert out["status"] == "VISUAL_READY"
 
 
-def test_render_agent_produces_mp4(tmp_path):
+def test_render_agent_produces_mp4(tmp_path, monkeypatch):
     from src.workflow.agents.render import RenderAgent
+    import src.video.renderer as renderer_mod
+
+    mp4 = tmp_path / "valido.mp4"
+    _make_mp4(mp4)
+
+    # Mock do HTMLRenderer para não depender de Chromium/Puppeteer/ffmpeg
+    # (não instalados no runner do CI). O teste valida a orquestração do agente,
+    # não a renderização externa.
+    class _FakeRenderer:
+        def render(self, *args, **kwargs):
+            out = Path(kwargs.get("output_name", "fake.mp4"))
+            out.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy(str(mp4), str(out))
+            return out
+
+    monkeypatch.setattr(renderer_mod, "HTMLRenderer", lambda *a, **k: _FakeRenderer())
+
     state = _initial_state("vid-render", "tema")
     state["script"] = {
         "title": "T",
@@ -409,9 +434,24 @@ def test_graph_compiles_and_nodes_present():
     assert expected.issubset(set(graph.nodes))
 
 
-def test_graph_pauses_for_human_approval(tmp_path):
+def test_graph_pauses_for_human_approval(tmp_path, monkeypatch):
     mp4 = tmp_path / "valido.mp4"
     _make_mp4(mp4)
+
+    # Mock do HTMLRenderer para não depender de Chromium/Puppeteer (não instalado
+    # neste ambiente). O teste valida a orquestração do grafo, não a render externa.
+    import src.video.renderer as renderer_mod
+
+    class _FakeRenderer:
+        def render(self, *args, **kwargs):
+            out = Path(kwargs.get("output_name", "fake.mp4"))
+            out.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+
+            shutil.copy(str(mp4), str(out))
+            return out
+
+    monkeypatch.setattr(renderer_mod, "HTMLRenderer", lambda *a, **k: _FakeRenderer())
 
     db_path = tmp_path / "checkpoints.sqlite3"
     with new_checkpointer(str(db_path)) as checkpointer:
@@ -430,9 +470,24 @@ def test_graph_pauses_for_human_approval(tmp_path):
         assert interrupts[0].value["video_id"] == "vid-graph-1"
 
 
-def test_graph_resume_after_approval_reaches_audit_and_end(tmp_path):
+def test_graph_resume_after_approval_reaches_audit_and_end(tmp_path, monkeypatch):
     mp4 = tmp_path / "valido.mp4"
     _make_mp4(mp4)
+
+    # Mock do HTMLRenderer para não depender de Chromium/Puppeteer (não instalado
+    # neste ambiente). O teste valida a orquestração do grafo, não a render externa.
+    import src.video.renderer as renderer_mod
+
+    class _FakeRenderer:
+        def render(self, *args, **kwargs):
+            out = Path(kwargs.get("output_name", "fake.mp4"))
+            out.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+
+            shutil.copy(str(mp4), str(out))
+            return out
+
+    monkeypatch.setattr(renderer_mod, "HTMLRenderer", lambda *a, **k: _FakeRenderer())
 
     db_path = tmp_path / "checkpoints.sqlite3"
     with new_checkpointer(str(db_path)) as checkpointer:
@@ -458,10 +513,25 @@ def test_graph_resume_after_approval_reaches_audit_and_end(tmp_path):
         ), final.get("audit_history")
 
 
-def test_graph_full_run_reaches_end_without_interrupt_when_rejected(tmp_path):
+def test_graph_full_run_reaches_end_without_interrupt_when_rejected(tmp_path, monkeypatch):
     """Quando rejeitado na aprovação humana, o grafo vai para ACTION_REQUIRED e não publica."""
     mp4 = tmp_path / "valido.mp4"
     _make_mp4(mp4)
+
+    # Mock do HTMLRenderer para não depender de Chromium/Puppeteer (não instalado
+    # neste ambiente). O teste valida a orquestração do grafo, não a render externa.
+    import src.video.renderer as renderer_mod
+
+    class _FakeRenderer:
+        def render(self, *args, **kwargs):
+            out = Path(kwargs.get("output_name", "fake.mp4"))
+            out.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+
+            shutil.copy(str(mp4), str(out))
+            return out
+
+    monkeypatch.setattr(renderer_mod, "HTMLRenderer", lambda *a, **k: _FakeRenderer())
 
     db_path = tmp_path / "checkpoints.sqlite3"
     with new_checkpointer(str(db_path)) as checkpointer:

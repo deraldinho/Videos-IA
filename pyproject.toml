@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tiktok-automation"
+version = "0.1.0"
+description = "TikTok AI Autopilot - pipeline local de produção e publicação de vídeos curtos"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Proprietary" }
+authors = [
+  { name = "Supervisor/CTO", email = "supervisor@tiktok-automation.local" },
+]
+keywords = ["tiktok", "automation", "video", "pipeline", "langgraph", "ffmpeg"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.2,<10",
+]
+
+[project.scripts]
+tiktok-automation = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+exclude = ["*.venv*", "*.venv", "node_modules*", "data*", "output*", "tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]

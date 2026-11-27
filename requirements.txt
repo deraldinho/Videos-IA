@@ -6,4 +6,8 @@ tzdata>=2025.2,<2027
 pydantic==2.13.4
 langchain==1.4.6
 langgraph==1.2.15
+langgraph-checkpoint-sqlite>=3.0.0
 numpy>=2.0
+fastapi==0.165.0
+uvicorn==0.54.0
+python-multipart==0.0.34
