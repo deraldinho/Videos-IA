@@ -4,7 +4,7 @@ mode: REVIEW  # DRY_RUN | REVIEW | AUTO  (temporário para teste de TTS/render; 
   # - REVIEW: revisão manual via FCC-Claude (modo assisted). Prompts são gravados
   #   em data/inbox/ para o operador submeter JSON de resposta.
   # - AUTO: execução totalmente automática (requer auto_enabled: true e credenciais).
-live_enabled: true  # libera operações externas Cloudinary/Buffer; ative deliberadamente
+live_enabled: false  # desabilitado: nenhuma operação externa real sem ativação deliberada
   # Quando true, Cloudinary e Buffer fazem upload/agendamento reais na TikTok.
   # Requer credenciais válidas no .env (CLOUDINARY_*, BUFFER_*).
 auto_enabled: false  # requerido para mode: AUTO  (temporário false para teste; restaurar true depois)
@@ -111,6 +111,6 @@ quality:
     # Quantidade de frames amostrados ao longo do vídeo para detetar conteúdo estático.
   dynamic_scene_thumbnail_size: 160  # tamanho da miniatura para comparação de cena
     # Tamanho (px) da miniatura quadrada usada na comparação byte-a-byte/pHash.
-  dynamic_scene_phash_threshold: 0.9  # similaridade pHash acima da qual é estático
+  dynamic_scene_phash_threshold: 0.4  # similaridade pHash acima da qual é estático
     # Similaridade perceptual acima da qual o vídeo é considerado estático.
     # 0.9 = hash diferindo em menos de 10% dos bits.

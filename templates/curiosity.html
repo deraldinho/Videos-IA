@@ -17,7 +17,14 @@
     justify-content: center;
     text-align: center;
     position: relative;
+    transition: background 0.8s ease, transform 0.8s ease;
   }
+  /* Variação DRAMÁTICA de background por cena */
+  body.scene-0 { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); }
+  body.scene-1 { background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460); transform: rotate(1deg); }
+  body.scene-2 { background: linear-gradient(135deg, #0d0d0d, #2c3e50, #1a1a2e); transform: rotate(-1deg); }
+  body.scene-3 { background: linear-gradient(135deg, #1b1b2f, #162447, #0f0f23); transform: scale(1.02); }
+  body.scene-4 { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); transform: rotate(0deg) scale(1); }
   .badge {
     position: absolute; top: 60px; left: 60px;
     background: #00f2ff; color: #000;
@@ -25,20 +32,104 @@
     font-weight: 800; font-size: 1.1rem; letter-spacing: 1px;
     box-shadow: 0 4px 15px rgba(0,242,255,0.4);
     animation: pulse 2s infinite;
+    transition: background 0.8s ease, color 0.8s ease, transform 0.8s ease;
   }
-  h1 { font-size: 2.6rem; line-height: 1.2; max-width: 900px; margin: 0 40px; }
-  p.sub { font-size: 1.4rem; margin-top: 30px; max-width: 860px; line-height: 1.5; opacity: 0.95; }
-  .hashtags { margin-top: 40px; font-size: 1.3rem; color: #00f2ff; font-weight: 700; }
-  .cta { position: absolute; bottom: 120px; font-size: 1.5rem; font-weight: 800; color: #ffd700; }
+  .badge.scene-1 { background: #ffd700; color: #000; box-shadow: 0 4px 15px rgba(255,215,0,0.4); transform: rotate(-3deg); }
+  .badge.scene-2 { background: #00e676; color: #000; box-shadow: 0 4px 15px rgba(0,230,118,0.4); transform: rotate(3deg); }
+  .badge.scene-3 { background: #f472b6; color: #fff; box-shadow: 0 4px 15px rgba(244,114,182,0.4); transform: scale(1.1); }
+  .badge.scene-4 { background: #ff6b6b; color: #fff; box-shadow: 0 4px 15px rgba(255,107,107,0.4); transform: rotate(0deg); }
+  h1 { font-size: 2.6rem; line-height: 1.2; max-width: 900px; margin: 0 40px; transition: color 0.8s ease, transform 0.8s ease, text-shadow 0.8s ease; }
+  h1.scene-1 { color: #ffd700; text-shadow: 0 0 30px #ffd700; transform: translateX(-20px); }
+  h1.scene-2 { color: #00e676; text-shadow: 0 0 30px #00e676; transform: translateX(20px); }
+  h1.scene-3 { color: #f472b6; text-shadow: 0 0 30px #f472b6; transform: scale(1.05); }
+  h1.scene-4 { color: #ff6b6b; text-shadow: 0 0 30px #ff6b6b; transform: translateX(0); }
+  .story-part { font-size: 1.5rem; line-height: 1.6; max-width: 860px; margin: 25px 0; opacity: 0.9; transition: transform 0.8s ease; }
+  .story-part.scene-1 { transform: translateY(-30px); }
+  .story-part.scene-2 { transform: translateY(30px); }
+  .story-part.scene-3 { transform: scale(1.02); }
+  .story-part.scene-4 { transform: translateY(0); }
+  p.sub { font-size: 1.4rem; margin-top: 30px; max-width: 860px; line-height: 1.5; opacity: 0.95; transition: opacity 0.8s ease; }
+  p.sub.scene-1 { opacity: 0.7; }
+  p.sub.scene-2 { opacity: 0.9; }
+  p.sub.scene-3 { opacity: 0.6; }
+  p.sub.scene-4 { opacity: 0.95; }
+  .narration { font-size: 1.4rem; line-height: 1.5; max-width: 860px; margin: 20px 40px; opacity: 0.9; transition: opacity 0.3s ease, transform 0.8s ease, color 0.8s ease; }
+  .narration.scene-1 { color: #ffd700; transform: translateY(-20px); }
+  .narration.scene-2 { color: #00e676; transform: translateY(20px); }
+  .narration.scene-3 { color: #f472b6; transform: scale(1.03); }
+  .narration.scene-4 { color: #ff6b6b; transform: translateY(0); }
+  .hashtags { margin-top: 40px; font-size: 1.3rem; color: #00f2ff; font-weight: 700; transition: color 0.8s ease, transform 0.8s ease; }
+  .hashtags.scene-1 { color: #ffd700; transform: rotate(-2deg); }
+  .hashtags.scene-2 { color: #00e676; transform: rotate(2deg); }
+  .hashtags.scene-3 { color: #f472b6; transform: scale(1.1); }
+  .hashtags.scene-4 { color: #ff6b6b; transform: rotate(0); }
+  .cta { position: absolute; bottom: 120px; font-size: 1.5rem; font-weight: 800; color: #ffd700; transition: color 0.8s ease, transform 0.8s ease; }
+  .cta.scene-1 { color: #ffd700; transform: scale(1.1); }
+  .cta.scene-2 { color: #00e676; transform: scale(0.9); }
+  .cta.scene-3 { color: #f472b6; transform: scale(1.05); }
+  .cta.scene-4 { color: #ff6b6b; transform: scale(1); }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.7;transform:scale(1.05);} }
   .fade-in { animation: fadeIn 0.8s ease-out forwards; }
   @keyframes fadeIn { from{opacity:0;transform:translateY(30px);} to{opacity:1;transform:translateY(0);} }
+  /* Elementos decorativos DRAMÁTICOS que mudam por cena - sem blur excessivo */
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(20px);
+    opacity: 0.6;
+    transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .orb-1 { width: 500px; height: 500px; top: 5%; left: 5%; background: #00f2ff; }
+  .orb-2 { width: 400px; height: 400px; bottom: 10%; right: 5%; background: #f472b6; }
+  .orb-3 { width: 300px; height: 300px; top: 35%; left: 2%; background: #00e676; }
+  .orb-4 { width: 250px; height: 250px; bottom: 30%; left: 15%; background: #ffd700; opacity: 0.4; }
+  .scene-1 .orb-1 { background: #ffd700; transform: scale(1.5) translate(100px, 100px); }
+  .scene-1 .orb-2 { background: #ff6b6b; transform: scale(0.5) translate(-100px, -100px); }
+  .scene-1 .orb-3 { background: #f472b6; transform: scale(2) translate(80px, -80px); }
+  .scene-1 .orb-4 { background: #00e676; transform: scale(2.5) translate(-100px, 100px); }
+  .scene-2 .orb-1 { background: #00e676; transform: scale(0.6) translate(-80px, -80px); }
+  .scene-2 .orb-2 { background: #00f2ff; transform: scale(1.5) translate(100px, 100px); }
+  .scene-2 .orb-3 { background: #ffd700; transform: scale(2.2) translate(-120px, 120px); }
+  .scene-2 .orb-4 { background: #ff6b6b; transform: scale(2) translate(120px, -120px); }
+  .scene-3 .orb-1 { background: #f472b6; transform: scale(1.8) translate(80px, 80px); }
+  .scene-3 .orb-2 { background: #00e676; transform: scale(1.6) translate(-100px, -100px); }
+  .scene-3 .orb-3 { background: #ffd700; transform: scale(2.5) translate(120px, -120px); }
+  .scene-3 .orb-4 { background: #00f2ff; transform: scale(1.5) translate(-80px, 80px); }
+  .scene-4 .orb-1 { background: #ff6b6b; transform: scale(1.4) translate(-50px, 50px); }
+  .scene-4 .orb-2 { background: #ffd700; transform: scale(1.2) translate(50px, -50px); }
+  .scene-4 .orb-3 { background: #f472b6; transform: scale(2) translate(-80px, -80px); }
+  .scene-4 .orb-4 { background: #00e676; transform: scale(1.8) translate(80px, 80px); }
+  /* Barras laterais decorativas que mudam de posição/cor */
+  .bar {
+    position: absolute;
+    width: 4px;
+    height: 100%;
+    transition: all 0.8s ease;
+  }
+  .bar-1 { left: 0; background: linear-gradient(to bottom, #00f2ff, transparent); }
+  .bar-2 { right: 0; background: linear-gradient(to bottom, transparent, #f472b6); }
+  .scene-1 .bar-1 { left: 20px; background: linear-gradient(to bottom, #ffd700, transparent); }
+  .scene-1 .bar-2 { right: 20px; background: linear-gradient(to bottom, transparent, #ff6b6b); }
+  .scene-2 .bar-1 { left: 40px; background: linear-gradient(to bottom, #00e676, transparent); }
+  .scene-2 .bar-2 { right: 40px; background: linear-gradient(to bottom, transparent, #00f2ff); }
+  .scene-3 .bar-1 { left: 10px; background: linear-gradient(to bottom, #f472b6, transparent); }
+  .scene-3 .bar-2 { right: 10px; background: linear-gradient(to bottom, transparent, #00e676); }
+  .scene-4 .bar-1 { left: 0; background: linear-gradient(to bottom, #ff6b6b, transparent); }
+  .scene-4 .bar-2 { right: 0; background: linear-gradient(to bottom, transparent, #ffd700); }
 </style>
 </head>
 <body>
+  <div class="bar bar-1"></div>
+  <div class="bar bar-2"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="orb orb-4"></div>
   <div class="badge fade-in">CURIOSIDADE</div>
   <h1 class="fade-in">{{title}}</h1>
+  <div class="story-part fade-in">{{story_body}}</div>
   <p class="sub fade-in">{{description}}</p>
+  <div class="narration fade-in"></div>
   <div class="hashtags fade-in">{{hashtags}}</div>
   <div class="cta fade-in">Segue para mais!</div>
 </body>

@@ -345,6 +345,36 @@ class HTMLRenderer:
   }}
   const totalDuration = bounds.length ? bounds[bounds.length - 1] : duration;
 
+  // Aplica a cena inicial (scene-0) antes do loop para garantir que o body tenha a classe
+  if (scenes.length) {{
+    const initialScene = scenes[0] || {{}};
+    await page.evaluate(({{ heading, narration, role }}) => {{
+      try {{
+        document.body.className = 'scene-0';
+        const h = document.querySelector('h1');
+        if (h && heading) h.textContent = heading;
+        h.className = 'scene-0';
+        const nar = document.querySelector('.narration');
+        if (nar && narration && narration.length) nar.textContent = narration.join(' ');
+        nar.className = 'narration scene-0';
+        const badge = document.querySelector('.badge');
+        if (badge && role) badge.textContent = role.toUpperCase();
+        badge.className = 'badge scene-0';
+        const tags = document.querySelector('.hashtags');
+        if (tags) tags.className = 'hashtags scene-0';
+        const highlight = document.querySelector('.highlight');
+        if (highlight) highlight.className = 'highlight scene-0';
+        const q = document.querySelector('.question');
+        if (q) q.className = 'question scene-0';
+        const a = document.querySelector('.answer');
+        if (a) a.className = 'answer scene-0';
+        document.querySelectorAll('.item').forEach(el => el.className = 'item scene-0');
+        document.querySelectorAll('.rank').forEach(el => el.className = 'rank scene-0');
+        document.title = heading || document.title;
+      }} catch (e) {{}}
+    }}, initialScene);
+  }}
+
   let currentSceneIndex = 0;
   for (let i = 0; i < total; i++) {{
     const t = (i / fps);
@@ -359,15 +389,37 @@ class HTMLRenderer:
       const scene = scenes[sceneIndex] || {{}};
       await page.evaluate(({{ heading, narration, role }}) => {{
         try {{
+          // Aplica classe de cena no body para ativar variações visuais (background, cores, orbs)
+          document.body.className = 'scene-' + sceneIndex;
           const h = document.querySelector('h1');
           if (h && heading) h.textContent = heading;
-          const p = document.querySelector('p.sub');
-          if (p && narration && narration.length) p.textContent = narration[0];
+          h.className = 'scene-' + sceneIndex;
+          // Atualiza elemento de narração dinâmica (ex.: div.narration)
+          const nar = document.querySelector('.narration');
+          if (nar && narration && narration.length) nar.textContent = narration.join(' ');
+          nar.className = 'narration scene-' + sceneIndex;
           const badge = document.querySelector('.badge');
           if (badge && role) badge.textContent = role.toUpperCase();
+          badge.className = 'badge scene-' + sceneIndex;
+          // Atualiza hashtags
+          const tags = document.querySelector('.hashtags');
+          if (tags) tags.className = 'hashtags scene-' + sceneIndex;
+          // Atualiza highlight (explainer)
+          const highlight = document.querySelector('.highlight');
+          if (highlight) highlight.className = 'highlight scene-' + sceneIndex;
+          // Atualiza question/answer (qa)
+          const q = document.querySelector('.question');
+          if (q) q.className = 'question scene-' + sceneIndex;
+          const a = document.querySelector('.answer');
+          if (a) a.className = 'answer scene-' + sceneIndex;
+          // Atualiza items da lista (list.html)
+          document.querySelectorAll('.item').forEach(el => el.className = 'item scene-' + sceneIndex);
+          document.querySelectorAll('.rank').forEach(el => el.className = 'rank scene-' + sceneIndex);
           document.title = heading || document.title;
         }} catch (e) {{ /* ignora: template pode não ter todos os elementos */ }}
       }}, scene);
+      // Aguarda o navegador aplicar as mudanças de classe antes do próximo screenshot
+      await new Promise(resolve => setTimeout(resolve, 50));
     }}
     await page.screenshot({{
       path: framesDir + '/frame-' + String(i).padStart(4, '0') + '.png',
