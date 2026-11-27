@@ -63,6 +63,13 @@ jobs:
           python -m py_compile main.py
           python -c "import src; print('src version:', src.__version__)"
 
+      - name: Garantir variáveis de ambiente do Windows (SystemRoot, ComSpec)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          [Environment]::SetEnvironmentVariable("SystemRoot", "C:\Windows", [EnvironmentVariableTarget]::Process)
+          [Environment]::SetEnvironmentVariable("ComSpec", "C:\Windows\System32\cmd.exe", [EnvironmentVariableTarget]::Process)
+
       - name: Executar suíte pytest isolada (sem APIs externas)
         run: |
           python -m pytest tests/ -q -p no:cacheprovider
