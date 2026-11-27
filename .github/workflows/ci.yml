@@ -25,8 +25,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install ffmpeg -y --no-progress || true
-          ffmpeg -version
+          choco install ffmpeg -y --no-progress
+          if ($LASTEXITCODE -ne 0) { Write-Host "choco install ffmpeg falhou (ignorado para não bloquear a CI)" }
+          ffmpeg -version 2>$null || Write-Host "ffmpeg não disponível após tentativa de instalação"
 
       - name: Instalar dependências Python
         run: |
