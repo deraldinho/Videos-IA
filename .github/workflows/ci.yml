@@ -25,7 +25,24 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install ffmpeg -y --no-progress
+          $ErrorActionPreference = "Continue"
+          winget install ffmpeg -s winget --accept-package-agreements --accept-source-agreements -h 2>$null
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            Write-Host "winget falhou; tentando download direto do ffmpeg"
+            $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2024-01-13-12-33/ffmpeg-master-latest-win64-gpl.zip"
+            $zip = "$env:TEMP\ffmpeg.zip"
+            Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 120
+            Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ffmpeg"
+            $exe = Get-ChildItem -Path "$env:TEMP\ffmpeg" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+            if ($exe) {
+              $dir = $exe.DirectoryName
+              [Environment]::SetEnvironmentVariable("PATH", "$dir;[Environment]::GetEnvironmentVariable('PATH',[EnvironmentVariableTarget]::Process)", [EnvironmentVariableTarget]::Process)
+              Write-Host "FFmpeg encontrado em: $dir"
+            } else {
+              Write-Host "FFmpeg não encontrado após download direto"
+              exit 1
+            }
+          }
 
       - name: Instalar dependências Python
         run: |
