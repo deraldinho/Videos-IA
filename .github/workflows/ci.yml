@@ -23,7 +23,9 @@ jobs:
 
       - name: Instalar FFmpeg (Windows)
         if: runner.os == 'Windows'
-        uses: actions/setup-ffmpeg@v3
+        shell: pwsh
+        run: |
+          choco install ffmpeg -y --no-progress
 
       - name: Instalar dependências Python
         run: |
@@ -59,6 +61,7 @@ jobs:
       - name: Varredura de segredos (detect-secrets)
         run: |
           pip install detect-secrets || true
+          touch .secrets.baseline
           detect-secrets scan --baseline .secrets.baseline || true
           # Não falhar a CI apenas por varredura; registra resultado para revisão.
           cat .secrets.baseline 2>/dev/null || echo "Nenhum baseline gerado."
