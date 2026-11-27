@@ -205,7 +205,8 @@ def _validate_required_env_vars(env_path: Path | str = ENV_PATH) -> None:
         return  # Nenhum arquivo .env; variáveis do processo têm precedência
 
     # Carregar config.yaml para detectar modo (antes de .env ser carregado)
-    config_path = Path(__file__).resolve().parents[1] / "config.yaml"
+    # Usa o config_path informado (permite testes com config temporária) em vez
+    # de ler sempre o config.yaml da raiz do projeto.
     import yaml
     try:
         with open(config_path, "r", encoding="utf-8") as fh:

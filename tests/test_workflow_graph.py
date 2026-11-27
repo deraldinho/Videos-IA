@@ -287,8 +287,26 @@ def test_visual_agent_creates_storyboard():
     assert out["status"] == "VISUAL_READY"
 
 
-def test_render_agent_produces_mp4(tmp_path):
+def test_render_agent_produces_mp4(tmp_path, monkeypatch):
     from src.workflow.agents.render import RenderAgent
+    import src.video.renderer as renderer_mod
+
+    mp4 = tmp_path / "valido.mp4"
+    _make_mp4(mp4)
+
+    # Mock do HTMLRenderer para não depender de Chromium/Puppeteer/ffmpeg
+    # (não instalados no runner do CI). O teste valida a orquestração do agente,
+    # não a renderização externa.
+    class _FakeRenderer:
+        def render(self, *args, **kwargs):
+            out = Path(kwargs.get("output_name", "fake.mp4"))
+            out.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy(str(mp4), str(out))
+            return out
+
+    monkeypatch.setattr(renderer_mod, "HTMLRenderer", lambda *a, **k: _FakeRenderer())
+
     state = _initial_state("vid-render", "tema")
     state["script"] = {
         "title": "T",
