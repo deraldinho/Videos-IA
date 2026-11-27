@@ -60,6 +60,15 @@ jobs:
           Write-Host "FFmpeg instalado em: $ffmpegDir\bin"
           Write-Host "Versão: $(Get-Command ffmpeg | Select-Object -ExpandProperty Source)"
 
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependências Node (Puppeteer + Chromium)
+        run: npm install
+
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
