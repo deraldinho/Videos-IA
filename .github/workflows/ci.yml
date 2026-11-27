@@ -25,9 +25,15 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install ffmpeg -y --no-progress
-          if ($LASTEXITCODE -ne 0) { Write-Host "choco install ffmpeg falhou (ignorado para não bloquear a CI)" }
-          ffmpeg -version 2>$null || Write-Host "ffmpeg não disponível após tentativa de instalação"
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2024-02-12-12-32/ffmpeg-master-latest-win64-gpl.zip"
+          $zip = "$env:TEMP\ffmpeg.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 120
+          Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ffmpeg" -Force
+          $binDir = (Get-ChildItem -Path "$env:TEMP\ffmpeg" -Filter "*bin*" | Select-Object -First 1).FullName
+          $ffmpegExe = Get-ChildItem -Path $binDir -Filter "ffmpeg.exe" | Select-Object -First 1
+          if (-not $ffmpegExe) { throw "ffmpeg.exe não encontrado após extração" }
+          echo "$($ffmpegExe.DirectoryName)" >> $env:GITHUB_PATH
+          ffmpeg -version
 
       - name: Instalar dependências Python
         run: |
